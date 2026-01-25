@@ -15,6 +15,7 @@ import vulkan_hpp;
 #include <cstdlib>
 
 using namespace std;
+using namespace vk::raii;
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
@@ -29,10 +30,18 @@ public:
     }
 
 private:
+    // raii library so it'll do the cleanup for us
     GLFWwindow* window = nullptr;
     vk::raii::Context context;
     vk::raii::Instance instance = nullptr;
     vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
+    vk::raii::PhysicalDevice physicalDevice = nullptr;
+
+    Device device = nullptr;
+    Queue graphicsQueue = nullptr;
+    vector<const char*> desiredDeviceExtensions = {
+        vk::KHRSwapchainExtensionName
+    };
 
     const vector<const char*> desiredValidationLayers = {
         "VK_LAYER_KHRONOS_validation"
@@ -148,9 +157,89 @@ private:
 
     }
 
+    static bool IsDeviceSuitable(const vk::raii::PhysicalDevice& physicalDevice) {
+        auto deviceProperties = physicalDevice.getProperties();
+        auto deviceFeatures = physicalDevice.getFeatures(); // What optional features?
+        
+        // Must support API Version >= 1.3
+        bool isSuitable = physicalDevice.getProperties().apiVersion >= VK_API_VERSION_1_3;
+
+        // It must have a queue family that supports graphics calls
+        auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+        
+        bool foundGraphicsFamily = false;
+        for (const auto& queueFamily : queueFamilies) {
+            if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
+                foundGraphicsFamily = true;
+                break;
+            }
+        }
+        isSuitable = isSuitable && foundGraphicsFamily;
+        return isSuitable;
+    }
+
+    static uint32_t FindGraphicsQueueFamilyIndex(const PhysicalDevice& physicalDevice) {
+        auto queueFamilies = physicalDevice.getQueueFamilyProperties();
+        auto graphicsIter = std::ranges::find_if(queueFamilies, [&](const auto& qFamily) {
+            return (qFamily.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
+            });
+        assert(graphicsIter != queueFamilies.end());
+        return static_cast<uint32_t>(std::distance(queueFamilies.begin(), graphicsIter));
+    }
+
+    void PickPhysicalDevice() {
+        // List graphics cards
+        vector<vk::raii::PhysicalDevice> devices = instance.enumeratePhysicalDevices();
+        if (devices.empty()) {
+            throw std::runtime_error("No GPUs that support vulkan");
+        }
+        // We gotta manually go through each device whereas WebGPU we could just say what features we want mostly
+        const auto devIter = std::ranges::find_if(devices, IsDeviceSuitable);
+        if (devIter == devices.end()) {
+            throw std::runtime_error("Couldn't find suitable GPU!");
+        }
+        physicalDevice = *devIter;
+    }
+
+    void CreateLogicalDevice() {
+        uint32_t graphicsIndex = FindGraphicsQueueFamilyIndex(physicalDevice);
+        float queuePriority = 0.5f; // [0,1] mandatory even if 1 queue
+        vk::DeviceQueueCreateInfo deviceQueueCreateInfo{ 
+            .queueFamilyIndex = graphicsIndex, // Index within physical device
+            .queueCount = 1, 
+            .pQueuePriorities = &queuePriority }; // For creating the graphics queue
+        // We can only have a few queues per queue family, and we only really need one per family.  We can create cmd buffers on multiple threads and submit all of them on main thread with low overhead
+        
+        // Modern simplification to auto chain structs with pNext
+        vk::StructureChain<
+            vk::PhysicalDeviceFeatures2, // A
+            vk::PhysicalDeviceVulkan13Features, // B 
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT // C
+        >
+            featureChain = {
+                {}, // constructor for A
+                {.dynamicRendering = true}, // constructor for B, dynamic rendering is a modern simplification
+                {.extendedDynamicState = true}
+        };
+
+        vk::DeviceCreateInfo deviceCreateInfo{
+            .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(), // The pointer to the first in the chain
+            .queueCreateInfoCount = 1,
+            .pQueueCreateInfos = &deviceQueueCreateInfo,
+            .enabledExtensionCount = static_cast<uint32_t>(desiredDeviceExtensions.size()),
+            .ppEnabledExtensionNames = desiredDeviceExtensions.data() // Device specific extensions
+        }; // Device specific validation layers obsolete so not here
+
+        device = Device(physicalDevice, deviceCreateInfo);
+        graphicsQueue = Queue(device, graphicsIndex, 0); // Get queue from our new device, 0 is the queue index within family, only 1 queue so we put 0
+
+    }
+
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
+        PickPhysicalDevice();
+        CreateLogicalDevice();
     }
 
     void MainLoop() {
