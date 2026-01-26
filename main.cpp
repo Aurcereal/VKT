@@ -14,6 +14,8 @@ import vulkan_hpp;
 #include <stdexcept>
 #include <cstdlib>
 
+#define U32T(v) (static_cast<uint32_t>(v))
+
 using namespace std;
 using namespace vk::raii;
 
@@ -35,17 +37,25 @@ private:
     vk::raii::Context context;
     vk::raii::Instance instance = nullptr;
     vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
+    vk::raii::SurfaceKHR surface = nullptr;
     vk::raii::PhysicalDevice physicalDevice = nullptr;
 
+    const vector<const char*> desiredValidationLayers = {
+        "VK_LAYER_KHRONOS_validation"
+    };
+
     Device device = nullptr;
+    Queue presentQueue = nullptr;
     Queue graphicsQueue = nullptr;
     vector<const char*> desiredDeviceExtensions = {
         vk::KHRSwapchainExtensionName
     };
 
-    const vector<const char*> desiredValidationLayers = {
-        "VK_LAYER_KHRONOS_validation"
-    };
+    SwapchainKHR swapChain = nullptr;
+    vector<vk::Image> swapChainImages;
+    vk::Format swapChainImageFormat = vk::Format::eUndefined;
+    vk::Extent2D swapChainExtent;
+
 
 #ifdef NDEBUG // Not Debug, Part of C++ Standard
     const bool enableValidationLayers = false;
@@ -178,13 +188,31 @@ private:
         return isSuitable;
     }
 
-    static uint32_t FindGraphicsQueueFamilyIndex(const PhysicalDevice& physicalDevice) {
+    void FindQueueFamilyIndices(const PhysicalDevice& physicalDevice, uint32_t* pGraphicsIndex, uint32_t* pPresentIndex) {
         auto queueFamilies = physicalDevice.getQueueFamilyProperties();
         auto graphicsIter = std::ranges::find_if(queueFamilies, [&](const auto& qFamily) {
             return (qFamily.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
             });
         assert(graphicsIter != queueFamilies.end());
-        return static_cast<uint32_t>(std::distance(queueFamilies.begin(), graphicsIter));
+        *pGraphicsIndex = static_cast<uint32_t>(std::distance(queueFamilies.begin(), graphicsIter));
+        *pPresentIndex = physicalDevice.getSurfaceSupportKHR(*pGraphicsIndex, *surface) 
+            ? *pGraphicsIndex : U32T(queueFamilies.size());
+
+        if (*pPresentIndex == queueFamilies.size()) {
+            // GraphicsIndex != PresentIndex, find queue family supports both
+            for (uint32_t i = 0; i < queueFamilies.size(); i++) {
+                if ((queueFamilies[i].queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0)
+                    && physicalDevice.getSurfaceSupportKHR(i, *surface)) {
+                    *pGraphicsIndex = i;
+                    *pPresentIndex = i;
+                    return;
+                }
+            }
+            throw std::runtime_error("Couldn't find single queue that supported both graphics and presentation, which we're requiring right now.");
+        }
+        else {
+            return;
+        }
     }
 
     void PickPhysicalDevice() {
@@ -201,8 +229,10 @@ private:
         physicalDevice = *devIter;
     }
 
+    uint32_t graphicsIndex, presentIndex;
     void CreateLogicalDevice() {
-        uint32_t graphicsIndex = FindGraphicsQueueFamilyIndex(physicalDevice);
+        // uint32_t graphicsIndex, presentIndex; // Very likely same qFamily
+        FindQueueFamilyIndices(physicalDevice, &graphicsIndex, &presentIndex);
         float queuePriority = 0.5f; // [0,1] mandatory even if 1 queue
         vk::DeviceQueueCreateInfo deviceQueueCreateInfo{ 
             .queueFamilyIndex = graphicsIndex, // Index within physical device
@@ -232,14 +262,118 @@ private:
 
         device = Device(physicalDevice, deviceCreateInfo);
         graphicsQueue = Queue(device, graphicsIndex, 0); // Get queue from our new device, 0 is the queue index within family, only 1 queue so we put 0
+        presentQueue = Queue(device, presentIndex, 0);
+        cout << "Graphics Index: " << graphicsIndex << endl;
+        cout << "Present Index: " << presentIndex << endl;
+    }
 
+    vk::SurfaceFormatKHR ChooseSwapSurfaceFormat(const vector<vk::SurfaceFormatKHR>& availableFormats) {
+        // SurfaceFormatKHR includes surface format (RGBA32, R8..) and color space, if it supports srgb color space
+        // We'll look for RGBA8, SRGB
+        for (const auto& format : availableFormats) {
+            if (format.format == vk::Format::eR8G8B8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+                return format;
+            }
+        }
+        cerr << "Couldn't find RGBA8, SRGB format" << endl;
+        return availableFormats[0];
+    }
+
+    vk::PresentModeKHR ChooseSwapPresentMode(const vector<vk::PresentModeKHR> availableModes) {
+        // Nice explanation of different modes at https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/01_Presentation/01_Swap_chain.html
+        // Mailbox is generally best, but we'll return the best we can find
+        // On mobile, regular FIFO is better
+        for (const auto& mode : availableModes) {
+            if (mode == vk::PresentModeKHR::eMailbox) {
+                return mode;
+            }
+        }
+        return vk::PresentModeKHR::eFifo;
+    }
+
+    vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
+        // The resolution of the swapchain images in pixels
+        // Usually equal to resolution of window we're drawing to, but
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+            return capabilities.currentExtent;
+        }
+        // vulkan tells us to differ when currentExtent at uint32 max, so we'll get best in range val
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+
+        return {
+            clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+            clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
+        };
+    }
+
+    void CreateSwapchain() {
+        vector<vk::SurfaceFormatKHR> availableFormats = physicalDevice.getSurfaceFormatsKHR(surface);
+        vector<vk::PresentModeKHR> availablePresentModes = physicalDevice.getSurfacePresentModesKHR(surface);
+        auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(surface);
+
+        auto swapSurfaceFormat = ChooseSwapSurfaceFormat(availableFormats);
+        auto presentMode = ChooseSwapPresentMode(availablePresentModes);
+        vk::Extent2D extent = ChooseSwapExtent(surfaceCapabilities);
+
+        swapChainImageFormat = swapSurfaceFormat.format;
+
+        uint32_t imageCount = surfaceCapabilities.minImageCount + 1; // How many imgs in swapchain you need to function plus one to avoid waiting
+        if (surfaceCapabilities.maxImageCount > 0 && imageCount > surfaceCapabilities.maxImageCount) {
+            // maxImageCount == 0 implies no maximum
+            imageCount = surfaceCapabilities.maxImageCount;
+        }
+
+        vk::SwapchainCreateInfoKHR swapChainCreateInfo{
+            .flags = vk::SwapchainCreateFlagsKHR(),
+            .surface = *surface,
+            .minImageCount = imageCount,
+            .imageFormat = swapSurfaceFormat.format,
+            .imageColorSpace = swapSurfaceFormat.colorSpace,
+            .imageExtent = extent,
+            .imageArrayLayers = 1, // # layers in each image (for stereoscopic 3D apps)
+            .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+            .imageSharingMode = vk::SharingMode::eExclusive,
+            .preTransform = surfaceCapabilities.currentTransform,
+            .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque, // how does the window blend with other windows?
+            .presentMode = presentMode,
+            .clipped = true, // don't care about pixels obscured by other windows
+            .oldSwapchain = nullptr, // advanced, for when this chain becomes obselete (on resize) and we need a new one
+        };
+
+        array<uint32_t, 2> queueFamilyIndices = { graphicsIndex, presentIndex };
+        if (graphicsIndex != presentIndex) {
+            swapChainCreateInfo.imageSharingMode = vk::SharingMode::eConcurrent; // Queues don't hog images when they need to share to drawing and presenting
+            swapChainCreateInfo.queueFamilyIndexCount = 2;
+            swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices.data(); // The family that owns the images
+        }
+        else {
+            swapChainCreateInfo.imageSharingMode = vk::SharingMode::eExclusive;
+            swapChainCreateInfo.queueFamilyIndexCount = 0;
+            swapChainCreateInfo.pQueueFamilyIndices = nullptr;
+        }
+
+        swapChain = SwapchainKHR(device, swapChainCreateInfo);
+        swapChainImages = swapChain.getImages();
+    }
+
+    void CreateSurface() {
+        VkSurfaceKHR rawSurface;
+        // Deref raii object acts as pointer
+        if (glfwCreateWindowSurface(*instance, window, nullptr, &rawSurface)) { // C API for this :(
+            throw std::runtime_error("Failed to create window surface");
+        }
+        surface = vk::raii::SurfaceKHR(instance, rawSurface); // Nice auto cleanup version
     }
 
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
+        CreateSurface();
         PickPhysicalDevice();
         CreateLogicalDevice();
+
+        CreateSwapchain();
     }
 
     void MainLoop() {
