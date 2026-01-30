@@ -79,6 +79,7 @@ private:
     vector<vk::raii::ImageView> swapChainImageViews;
 
     vk::raii::PipelineLayout pipelineLayout = nullptr;
+    vk::raii::Pipeline graphicsPipeline = nullptr;
 
 
 #ifdef NDEBUG // Not Debug, Part of C++ Standard
@@ -97,7 +98,7 @@ private:
 
     static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*) {
         // messageSeverity >= vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning
-        std::cerr << "validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
+        std::cerr << "VALIDATION LAYER ERROR: validation layer: " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
 
         return vk::False;
     }
@@ -191,14 +192,14 @@ private:
 
     }
 
-    static bool IsDeviceSuitable(const vk::raii::PhysicalDevice& physicalDevice) {
+    bool IsDeviceSuitable(const vk::raii::PhysicalDevice& physicalDevice) {
         auto deviceProperties = physicalDevice.getProperties();
         auto deviceFeatures = physicalDevice.getFeatures(); // What optional features?
 
         // Must support API Version >= 1.3
         bool isSuitable = physicalDevice.getProperties().apiVersion >= VK_API_VERSION_1_3;
 
-        // It must have a queue family that supports graphics calls
+        // It must have a queue family that supports graphics calls (we assume it has presentation)
         auto queueFamilies = physicalDevice.getQueueFamilyProperties();
 
         bool foundGraphicsFamily = false;
@@ -209,6 +210,22 @@ private:
             }
         }
         isSuitable = isSuitable && foundGraphicsFamily;
+
+        // Check if all required device extensions available
+        auto availableDeviceExtensions = physicalDevice.enumerateDeviceExtensionProperties();
+        isSuitable = isSuitable && std::ranges::all_of(desiredDeviceExtensions, [&availableDeviceExtensions](const auto& requiredExtension) {
+            return std::ranges::any_of(availableDeviceExtensions, [&](const auto& availableExtension) {
+                return strcmp(availableExtension.extensionName, requiredExtension) == 0;
+                });
+            });
+
+        // Check features (corresponds to logical device features we add)
+        auto features = physicalDevice.template getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+        isSuitable = isSuitable &&
+            features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
+            features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+            features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
+
         return isSuitable;
     }
 
@@ -246,7 +263,7 @@ private:
             throw std::runtime_error("No GPUs that support vulkan");
         }
         // We gotta manually go through each device whereas WebGPU we could just say what features we want mostly
-        const auto devIter = std::ranges::find_if(devices, IsDeviceSuitable);
+        const auto devIter = std::ranges::find_if(devices, [&](const auto& physicalDevice) { return IsDeviceSuitable(physicalDevice); });
         if (devIter == devices.end()) {
             throw std::runtime_error("Couldn't find suitable GPU!");
         }
@@ -267,12 +284,14 @@ private:
         // Modern simplification to auto chain structs with pNext
         vk::StructureChain<
             vk::PhysicalDeviceFeatures2, // A
-            vk::PhysicalDeviceVulkan13Features, // B 
-            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT // C
+            vk::PhysicalDeviceVulkan11Features, // B
+            vk::PhysicalDeviceVulkan13Features, // C 
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT // D
         >
             featureChain = {
-                {}, // constructor for A
-                {.dynamicRendering = true}, // constructor for B, dynamic rendering is a modern simplification
+                {}, // constructor for A,
+                {.shaderDrawParameters = true}, // B
+                {.dynamicRendering = true}, // constructor for C, dynamic rendering is a modern simplification
                 {.extendedDynamicState = true}
         };
 
@@ -542,6 +561,30 @@ private:
             .pushConstantRangeCount = 0 // different way of pushing dynamic vals to shaders
         };
         pipelineLayout = PipelineLayout(device, pipelineLayoutInfo);
+
+        // Dynamic (simplified) rendering setup
+        vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo = {
+            .colorAttachmentCount = 1,
+            .pColorAttachmentFormats = &swapSurfaceFormat.format
+        };
+
+        vk::GraphicsPipelineCreateInfo pipelineInfo = {
+            .pNext = &pipelineRenderingCreateInfo,
+            .stageCount = 2, .pStages = shaderStages.data(),
+            .pVertexInputState = &vertexInputInfo, .pInputAssemblyState = &inputAssembly,
+            .pViewportState = &viewportState, .pRasterizationState = &rasterizer,
+            .pMultisampleState = &multiSampling, .pColorBlendState = &colorBlending,
+            .pDynamicState = &dynamicState, .layout = pipelineLayout,
+            .renderPass = nullptr, // dynamic rendering removes need for render pass
+
+            // OPTIONAL, you can make pipelines derive from a similar pipeline to simplify and speedup creation, we're not doing that here so it's optional
+            // would also need VK_PIPELINE_CREATE_DERIVATIVE_BIT
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = -1
+        };
+
+        // nullptr is PipelineCache object which stores creation info across multiple calls to create pipeline, speed up pipeline creation significantly
+        graphicsPipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
 
     }
 
