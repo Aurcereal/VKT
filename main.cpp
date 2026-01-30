@@ -10,6 +10,7 @@ import vulkan_hpp;
 #include <GLFW/glfw3.h>
 
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <stdexcept>
 #include <cstdlib>
@@ -21,6 +22,25 @@ using namespace vk::raii;
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
+
+static vector<char> readFile(const std::string& fileName) {
+    std::ifstream file(fileName,
+        std::ios::ate | // start from end of file to easily get filesize
+        std::ios::binary // read as binary
+    );
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Couldn't open file");
+    }
+
+    vector<char> buffer(file.tellg()); // cursor pos is size
+    file.seekg(0, std::ios::beg);
+    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+
+    file.close();
+
+    return buffer;
+}
 
 class Application {
 public:
@@ -392,9 +412,38 @@ private:
 
     }
 
+    // [[nodiscard]] will make program throw error is programmer calls func without using return value
+    [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const vector<char>& compiledCode) const {
+        vk::ShaderModuleCreateInfo createInfo{
+            .codeSize = compiledCode.size() * sizeof(char),
+            .pCode = reinterpret_cast<const uint32_t*>(compiledCode.data()) // compiledCode.data() is char* but we wanna read vector as if it has uint32_t (1 byte to 4 byte is dangerous for alignment but vector is aligned to 4 bytes so we good)
+        };
+
+        vk::raii::ShaderModule shaderModule(device, createInfo);
+
+        return shaderModule;
+    }
+
     void CreateGraphicsPipeline() {
         // Do programmable stages; Vertex, Fragment
         // Then fixed-function parameter setup for blending mode, viewport, rasterization
+        auto shaderModule = CreateShaderModule(readFile("shaders/slang.spv"));
+
+        vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
+            .stage = vk::ShaderStageFlagBits::eVertex,
+            .module = shaderModule,
+            .pName = "vertMain" // Name of main func in shader
+        };
+        // Optional pSpecializationInfo member you can specify values for compile time shader constants (more efficient than uniform)
+        vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
+            .stage = vk::ShaderStageFlagBits::eFragment,
+            .module = shaderModule,
+            .pName = "fragMain" // Name of main func in shader
+        };
+        array<vk::PipelineShaderStageCreateInfo, 2> shaderStages = {
+            vertShaderStageInfo, fragShaderStageInfo
+        };
+
     }
 
     void InitVulkan() {
