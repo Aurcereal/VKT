@@ -84,6 +84,10 @@ private:
     vk::raii::CommandPool commandPool = nullptr;
     vk::raii::CommandBuffer commandBuffer = nullptr;
 
+    vk::raii::Semaphore presentCompleteSemaphore = nullptr;
+    vk::raii::Semaphore renderFinishedSemaphore = nullptr;
+    vk::raii::Fence drawFence = nullptr;
+
 #ifdef NDEBUG // Not Debug, Part of C++ Standard
     const bool enableValidationLayers = false;
 #else
@@ -226,6 +230,7 @@ private:
         isSuitable = isSuitable &&
             features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
             features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+            features.template get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
             features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
 
         return isSuitable;
@@ -293,7 +298,7 @@ private:
             featureChain = {
                 {}, // constructor for A,
                 {.shaderDrawParameters = true}, // B
-                {.dynamicRendering = true}, // constructor for C, dynamic rendering is a modern simplification
+                {.synchronization2 = true, .dynamicRendering = true}, // constructor for C, dynamic rendering is a modern simplification
                 {.extendedDynamicState = true}
         };
 
@@ -705,6 +710,14 @@ private:
 
     }
 
+    void CreateSyncObjects() {
+        presentCompleteSemaphore = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
+        renderFinishedSemaphore = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
+        drawFence = vk::raii::Fence(device, {
+            .flags = vk::FenceCreateFlagBits::eSignaled
+            });
+    }
+
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
@@ -719,13 +732,82 @@ private:
 
         CreateCommandPool();
         CreateCommandBuffer();
+
+        CreateSyncObjects();
+    }
+
+    void DrawFrame() {
+        // Wait for prev frame to finish
+        // Get image from swap chain
+        // Record command buffer which renders onto that image
+        // Submit recorded command buffer
+        // Present swap chain image
+
+        // Semaphore enforces synchronization btwn 2 queue ops
+        // Forces one queue op (the wait) to wait for another queue op (the signal) to finish
+        // Once (the wait) finishes, signal turns back off to allow this process to happen again
+        // Semaphores enforce gpu waiting, but how to do CPU waiting?
+
+        // Fence synchronizes execution on CPU, we can wait on GPU ops
+        // Create a fence, make queue op signal fence, and call a wait for fence signal func on cpu
+        // Unlike semaphores, fences must be reset manually
+
+        // Semaphores preferably since we don't block host
+
+
+
+
+        // Wait until prev frame finished
+        // Takes in array of fences, true indicates we want to wait for all of em, UINT64_MAX is the timeout, effectively disabled
+        presentQueue.waitIdle();//auto fenceResult = device.waitForFences(*drawFence, vk::True, UINT64_MAX);
+        
+
+        // Grab img from framebuffer now that prev frame done
+        // presentCompleteSemaphore is signaled when image is finished being used
+        auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphore, nullptr);
+    
+        // Record drawing cmds
+        RecordCommandBuffer(imageIndex);
+
+        device.resetFences(*drawFence); // put the fence up
+        vk::PipelineStageFlags waitDstStageMask( vk::PipelineStageFlagBits::eColorAttachmentOutput );
+        const vk::SubmitInfo submitInfo = {
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*presentCompleteSemaphore, // Wait for this semaphore to
+            .pWaitDstStageMask = &waitDstStageMask, // Write colors
+
+            .commandBufferCount = 1,
+            .pCommandBuffers = &*commandBuffer, // Submit this cmd buffer
+
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &*renderFinishedSemaphore // Signal once done
+        };
+
+        graphicsQueue.submit(submitInfo, *drawFence); // Fence will be put down when done
+        auto fenceResult = device.waitForFences(*drawFence, vk::True, UINT64_MAX);
+        if (fenceResult != vk::Result::eSuccess) {
+            throw std::runtime_error("Failed to wait for fence");
+        }
+
+        const vk::PresentInfoKHR presentInfoKHR = {
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*renderFinishedSemaphore, // Wait for render
+
+            .swapchainCount = 1,
+            .pSwapchains = &*swapChain,
+            .pImageIndices = &imageIndex
+        };
+        presentQueue.presentKHR(presentInfoKHR);
     }
 
     void MainLoop() {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents(); // Check for User Input Events
-
+            DrawFrame();
         }
+
+        // When we exit, wait for lingering commands to finish
+        device.waitIdle();
     }
 
     void Cleanup() {
