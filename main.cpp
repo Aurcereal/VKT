@@ -14,6 +14,13 @@ import vulkan_hpp;
 #include <stdexcept>
 #include <cstdlib>
 
+#include <glm/glm.hpp>
+using namespace glm;
+struct Vertex {
+    vec2 pos;
+    vec3 color;
+};
+
 #define U32T(v) (static_cast<uint32_t>(v))
 
 using namespace std;
