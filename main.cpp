@@ -15,21 +15,40 @@ import vulkan_hpp;
 #include <cstdlib>
 
 #include <glm/glm.hpp>
-using namespace glm;
-struct Vertex {
-    vec2 pos;
-    vec3 color;
-};
 
 #define U32T(v) (static_cast<uint32_t>(v))
 
 using namespace std;
 using namespace vk::raii;
+using namespace glm;
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2; // Shouldn't be too many, don't want GPU to fall behind CPU
+
+struct Vertex {
+    vec2 pos;
+    vec3 color;
+
+    static vk::VertexInputBindingDescription getBindingDescription() {
+        return { 0, sizeof(Vertex), vk::VertexInputRate::eVertex }; // binding index, stride, load data per vertex
+    }
+
+    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions() {
+        // Location, Binding Index
+        return {
+            vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)),
+            vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color))
+        };
+    }
+};
+
+const vector<Vertex> vertices = {
+    {vec2(-0.5f, -0.5f), vec3(1.0f, 1.0f, 0.0f)},
+    {vec2(0.5f, 0.5f), vec3(0.0f, 1.0f, 0.0f)},
+    {vec2(-0.5f, 0.5f), vec3(0.0f, 0.0f, 1.0f)}
+};
 
 static vector<char> readFile(const std::string& fileName) {
     std::ifstream file(fileName,
@@ -101,6 +120,10 @@ private:
 
     // True when user resizes
     bool frameBufferResized = false;
+
+    //
+    vk::raii::Buffer vertexBuffer = nullptr;
+    vk::raii::DeviceMemory vertexBufferMemory = nullptr;
 
 #ifdef NDEBUG // Not Debug, Part of C++ Standard
     const bool enableValidationLayers = false;
@@ -373,8 +396,8 @@ private:
         glfwGetFramebufferSize(window, &width, &height);
 
         return {
-            clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-            clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
+            std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+            std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
         };
     }
 
@@ -510,8 +533,15 @@ private:
         // Choosing to make this dynamic will make us HAVE TO specify it at drawing time and the baked config vals for it will be ignored
 
         // Format of vertex data = (bindings = spacing, attribute desc = types of attributes)
-        vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
-        // won't use for now since we're not using vertex buffer
+        auto bindingDescription = Vertex::getBindingDescription();
+        auto attributeDescriptions = Vertex::getAttributeDescriptions();
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo = {
+            .vertexBindingDescriptionCount = 1,
+            .pVertexBindingDescriptions = &bindingDescription,
+
+            .vertexAttributeDescriptionCount = attributeDescriptions.size(),
+            .pVertexAttributeDescriptions = attributeDescriptions.data()
+        };
 
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly = {
             .topology = vk::PrimitiveTopology::eTriangleList
@@ -706,8 +736,9 @@ private:
         // All record cmds return void so no error handling til we finished recording
         commandBuffer.beginRendering(renderingInfo);
 
-        // graphics or compute?
+        // Bind Graphics Pipeline and Geo Data
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        commandBuffer.bindVertexBuffers(0, *vertexBuffer, { 0 }); // Bind buffer to our binding which has layout and stride stuff {0} is array of vertex buffers to bind
 
         // remember in the pipeline we specified viewport and scissor state as dynamic, so we gotta specify them now
         commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height)));
@@ -775,6 +806,53 @@ private:
         CreateImageViews();
     }
 
+    uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
+        // Find what memory vertex buffer shoul use
+        vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
+        
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+            if (
+                (typeFilter & (1 << i)) && // is in our type filter
+                (memProperties.memoryTypes[i].propertyFlags & properties) == properties // has at least all props we want
+                ) {
+                return i;
+            }
+        }
+
+        throw std::runtime_error("failed to find suitable memory type");
+    }
+
+    void CreateVertexBuffer() {
+        vk::BufferCreateInfo bufferInfo = { 
+            .size = sizeof(vertices[0]) * vertices.size(), 
+            .usage = vk::BufferUsageFlagBits::eVertexBuffer, // could have multiple usages
+            .sharingMode = vk::SharingMode::eExclusive // only used by graphics queue
+        };
+        vertexBuffer = vk::raii::Buffer(device, bufferInfo);
+
+        // The buffer doesn't have memory assigned to it automatically
+        vk::MemoryRequirements memRequirements = vertexBuffer.getMemoryRequirements();
+        // memRequirements has size (requiredSize), alignment requirement, memoryTypeBits (type of memory suitable)
+        vk::MemoryAllocateInfo memoryAllocateInfo = { 
+            .allocationSize = memRequirements.size, 
+            .memoryTypeIndex = FindMemoryType(
+                memRequirements.memoryTypeBits, // Type Filter
+                vk::MemoryPropertyFlagBits::eHostVisible | 
+                vk::MemoryPropertyFlagBits::eHostCoherent
+            ) 
+        };
+        vertexBufferMemory = vk::raii::DeviceMemory(device, memoryAllocateInfo);
+        vertexBuffer.bindMemory(*vertexBufferMemory, 0); // 0 is offset within memory region, nonzero needs divisible by memRequirements.alignment
+
+        // Fill Vertex Buffer w Data
+        void* data = vertexBufferMemory.mapMemory(0, bufferInfo.size); // (0, bufferInfo.size) are offset and size; Map vertex buffer data to cpu memory
+        memcpy(data, vertices.data(), bufferInfo.size);
+        vertexBufferMemory.unmapMemory();
+        // hostCoherence ensures CPU memory = GPU memory so dont need to explicitly time this
+        // GPU data guaranteed to be there by next queueSubmit
+
+    }
+
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
@@ -786,6 +864,8 @@ private:
         CreateImageViews();
 
         CreateGraphicsPipeline();
+
+        CreateVertexBuffer();
 
         CreateCommandPool();
         CreateCommandBuffers();
