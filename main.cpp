@@ -809,7 +809,7 @@ private:
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
         // Find what memory vertex buffer shoul use
         vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
-        
+
         for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
             if (
                 (typeFilter & (1 << i)) && // is in our type filter
@@ -822,35 +822,59 @@ private:
         throw std::runtime_error("failed to find suitable memory type");
     }
 
-    void CreateVertexBuffer() {
-        vk::BufferCreateInfo bufferInfo = { 
-            .size = sizeof(vertices[0]) * vertices.size(), 
-            .usage = vk::BufferUsageFlagBits::eVertexBuffer, // could have multiple usages
-            .sharingMode = vk::SharingMode::eExclusive // only used by graphics queue
-        };
-        vertexBuffer = vk::raii::Buffer(device, bufferInfo);
+    void CreateBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer* buffer, vk::raii::DeviceMemory* bufferMemory) {
+        vk::BufferCreateInfo bufferInfo{ .size = size, .usage = usage, .sharingMode = vk::SharingMode::eExclusive };
+        *buffer = vk::raii::Buffer(device, bufferInfo);
 
-        // The buffer doesn't have memory assigned to it automatically
-        vk::MemoryRequirements memRequirements = vertexBuffer.getMemoryRequirements();
-        // memRequirements has size (requiredSize), alignment requirement, memoryTypeBits (type of memory suitable)
-        vk::MemoryAllocateInfo memoryAllocateInfo = { 
-            .allocationSize = memRequirements.size, 
-            .memoryTypeIndex = FindMemoryType(
-                memRequirements.memoryTypeBits, // Type Filter
-                vk::MemoryPropertyFlagBits::eHostVisible | 
-                vk::MemoryPropertyFlagBits::eHostCoherent
-            ) 
-        };
-        vertexBufferMemory = vk::raii::DeviceMemory(device, memoryAllocateInfo);
-        vertexBuffer.bindMemory(*vertexBufferMemory, 0); // 0 is offset within memory region, nonzero needs divisible by memRequirements.alignment
-
-        // Fill Vertex Buffer w Data
-        void* data = vertexBufferMemory.mapMemory(0, bufferInfo.size); // (0, bufferInfo.size) are offset and size; Map vertex buffer data to cpu memory
-        memcpy(data, vertices.data(), bufferInfo.size);
-        vertexBufferMemory.unmapMemory();
+        vk::MemoryRequirements memRequirements = buffer->getMemoryRequirements();
+        vk::MemoryAllocateInfo allocInfo{ .allocationSize = memRequirements.size, .memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties) };
+        *bufferMemory = vk::raii::DeviceMemory(device, allocInfo);
+        buffer->bindMemory(*bufferMemory, 0); // 0 is offset within memory region, nonzero needs divisible by memRequirements.alignment
         // hostCoherence ensures CPU memory = GPU memory so dont need to explicitly time this
         // GPU data guaranteed to be there by next queueSubmit
+    }
 
+    void CopyBuffer(vk::raii::Buffer& src, vk::raii::Buffer& dst, vk::DeviceSize size) {
+        // Create a temp command buf, could create a different one for this exclusive purpose
+        vk::CommandBufferAllocateInfo allocInfo{ .commandPool = commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1 };
+        vk::raii::CommandBuffer cmd = std::move(device.allocateCommandBuffers(allocInfo).front());
+        // use temporary?
+        cmd.begin(vk::CommandBufferBeginInfo{
+            .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+            });
+        cmd.copyBuffer(src, dst, vk::BufferCopy(0, 0, size)); // From where to where
+        cmd.end();
+        // Graphics queue MUST support TRANSFER BIT
+        graphicsQueue.submit(vk::SubmitInfo{ .commandBufferCount = 1, .pCommandBuffers = &*cmd }, nullptr);
+        graphicsQueue.waitIdle(); // fence would be necessary with multiple transfers scheduled simultaneously
+    }
+
+    void CreateVertexBuffer() {
+        vk::DeviceSize bufferSize = sizeof(Vertex) * vertices.size();
+
+        vk::raii::Buffer stagingBuffer = nullptr;;
+        vk::raii::DeviceMemory stagingMemory = nullptr;
+        CreateBuffer(bufferSize,
+            vk::BufferUsageFlagBits::eTransferSrc, // Can be source of a transfer
+            vk::MemoryPropertyFlagBits::eHostVisible |
+            vk::MemoryPropertyFlagBits::eHostCoherent,
+            &stagingBuffer, &stagingMemory);
+
+        // Fill Vertex Buffer w Data
+        void* stagingMemoryData = stagingMemory.mapMemory(0, bufferSize); // (0, bufSize) are offset and size; Map vertex buffer data to cpu memory
+        memcpy(stagingMemoryData, vertices.data(), bufferSize);
+        stagingMemory.unmapMemory();
+
+        CreateBuffer(bufferSize,
+            vk::BufferUsageFlagBits::eVertexBuffer |
+            vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal, // Device local, can't map memory directly
+            &vertexBuffer, &vertexBufferMemory);
+
+        CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+        // Staging buffer will be cleaned up RAII
+        // Staging allows us to use high performance memory for loading vertex data
+        // In practice, not good to do a separate allocation for every object, better to do one big one and split it up (VulkanMemoryAllocator library)
     }
 
     void InitVulkan() {
@@ -865,12 +889,12 @@ private:
 
         CreateGraphicsPipeline();
 
-        CreateVertexBuffer();
-
         CreateCommandPool();
         CreateCommandBuffers();
 
         CreateSyncObjects();
+
+        CreateVertexBuffer();
     }
 
     void DrawFrame() {
