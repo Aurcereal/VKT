@@ -46,8 +46,15 @@ struct Vertex {
 
 const vector<Vertex> vertices = {
     {vec2(-0.5f, -0.5f), vec3(1.0f, 1.0f, 0.0f)},
-    {vec2(0.5f, 0.5f), vec3(0.0f, 1.0f, 0.0f)},
-    {vec2(-0.5f, 0.5f), vec3(0.0f, 0.0f, 1.0f)}
+    {vec2(-0.5f, 0.5f), vec3(0.0f, 1.0f, 0.0f)},
+    {vec2(0.5f, -0.5f), vec3(0.0f, 0.0f, 1.0f)},
+    {vec2(0.5f, 0.5f), vec3(1.0f, 1.0f, 1.0f)}
+};
+
+// Need uint32_t for massive meshes
+const vector<uint16_t> indices = {
+    2, 1, 0,
+    2, 3, 1
 };
 
 static vector<char> readFile(const std::string& fileName) {
@@ -122,8 +129,11 @@ private:
     bool frameBufferResized = false;
 
     //
-    vk::raii::Buffer vertexBuffer = nullptr;
-    vk::raii::DeviceMemory vertexBufferMemory = nullptr;
+    Buffer vertexBuffer = nullptr;
+    DeviceMemory vertexBufferMemory = nullptr;
+    Buffer indexBuffer = nullptr;
+    DeviceMemory indexBufferMemory = nullptr;
+    
 
 #ifdef NDEBUG // Not Debug, Part of C++ Standard
     const bool enableValidationLayers = false;
@@ -739,13 +749,14 @@ private:
         // Bind Graphics Pipeline and Geo Data
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         commandBuffer.bindVertexBuffers(0, *vertexBuffer, { 0 }); // Bind buffer to our binding which has layout and stride stuff {0} is array of vertex buffers to bind
+        commandBuffer.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
 
         // remember in the pipeline we specified viewport and scissor state as dynamic, so we gotta specify them now
         commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height)));
         commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
 
-        // VertexCount, InstanceCount, FirstVertex (Vertex Buffer Offset), FirstInstance
-        commandBuffer.draw(3, 1, 0, 0);
+        // IndexCount, InstanceCount, IndexBufferOffset, VertexBufferOffset, InstanceOffset
+        commandBuffer.drawIndexed(indices.size(), 1, 0, 0, 0);
 
         commandBuffer.endRendering();
         // END RENDER
@@ -875,6 +886,24 @@ private:
         // Staging buffer will be cleaned up RAII
         // Staging allows us to use high performance memory for loading vertex data
         // In practice, not good to do a separate allocation for every object, better to do one big one and split it up (VulkanMemoryAllocator library)
+        // You should even go a step further, allocate a single vertex and index buffer for lots of things and use offsets to bindvertexbuffers to store lots of 3D objects
+    }
+
+    void CreateIndexBuffer() {
+        vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+        Buffer stagingBuffer = nullptr;
+        DeviceMemory stagingMemory = nullptr;
+        CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+            &stagingBuffer, &stagingMemory);
+        void* data = stagingMemory.mapMemory(0, bufferSize);
+        memcpy(data, indices.data(), bufferSize);
+        stagingMemory.unmapMemory();
+
+        CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal,
+            &indexBuffer, &indexBufferMemory);
+
+        CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
     }
 
     void InitVulkan() {
@@ -895,6 +924,7 @@ private:
         CreateSyncObjects();
 
         CreateVertexBuffer();
+        CreateIndexBuffer();
     }
 
     void DrawFrame() {
