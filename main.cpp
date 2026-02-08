@@ -14,6 +14,7 @@ import vulkan_hpp;
 #include <stdexcept>
 #include <cstdlib>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE // Force projection matrix to have (0,1) depth instead of (-1,1)
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -41,7 +42,7 @@ struct UniformBufferObject {
 };
 
 struct Vertex {
-    vec2 pos;
+    vec3 pos;
     vec3 color;
     vec2 uv;
 
@@ -52,7 +53,7 @@ struct Vertex {
     static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions() {
         // Location, Binding Index
         return {
-            vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos)),
+            vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, pos)),
             vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
             vk::VertexInputAttributeDescription(2, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, uv))
         };
@@ -60,16 +61,24 @@ struct Vertex {
 };
 
 const vector<Vertex> vertices = {
-    {vec2(-0.5f, -0.5f), vec3(1.0f, 1.0f, 0.0f), vec2(0,0)},
-    {vec2(-0.5f, 0.5f), vec3(0.0f, 1.0f, 0.0f), vec2(0,1)},
-    {vec2(0.5f, -0.5f), vec3(0.0f, 0.0f, 1.0f), vec2(1,0)},
-    {vec2(0.5f, 0.5f), vec3(1.0f, 1.0f, 1.0f), vec2(1,1)}
+    {vec3(-0.5f, -0.5f, 0.0f), vec3(1.0f, 1.0f, 0.0f), vec2(0,0)},
+    {vec3(-0.5f, 0.5f, 0.0f), vec3(0.0f, 1.0f, 0.0f), vec2(0,1)},
+    {vec3(0.5f, -0.5f, 0.0f), vec3(0.0f, 0.0f, 1.0f), vec2(1,0)},
+    {vec3(0.5f, 0.5f, 0.0f), vec3(1.0f, 1.0f, 1.0f), vec2(1,1)},
+
+    {vec3(-0.5f, -0.5f, -.5f), vec3(1.0f, 1.0f, 0.0f), vec2(0,0)},
+    {vec3(-0.5f, 0.5f, -.5f), vec3(0.0f, 1.0f, 0.0f), vec2(0,1)},
+    {vec3(0.5f, -0.5f, -.5f), vec3(0.0f, 0.0f, 1.0f), vec2(1,0)},
+    {vec3(0.5f, 0.5f, -.5f), vec3(1.0f, 1.0f, 1.0f), vec2(1,1)},
 };
 
 // Need uint32_t for massive meshes
 const vector<uint16_t> indices = {
     0, 1, 2,
-    1, 3, 2
+    1, 3, 2,
+
+    4, 5, 6,
+    5, 7, 6,
 };
 
 static vector<char> readFile(const std::string& fileName) {
@@ -139,6 +148,11 @@ private:
     vector<vk::raii::Semaphore> presentCompleteSemaphores;
     vector<vk::raii::Semaphore> renderFinishedSemaphores;
     vector<vk::raii::Fence> drawFences;
+
+    // Only one image since only one draw op running at once
+    Image depthImage = nullptr;
+    DeviceMemory depthImageMemory = nullptr;
+    ImageView depthImageView = nullptr;
 
     uint32_t currFrameIndex;
 
@@ -661,10 +675,20 @@ private:
         };
         pipelineLayout = PipelineLayout(device, pipelineLayoutInfo);
 
+        // Depth & stencil state
+        vk::PipelineDepthStencilStateCreateInfo depthStencil = {
+            .depthTestEnable = vk::True,
+            .depthWriteEnable = vk::True, // should new frags write to depth buff
+            .depthCompareOp = vk::CompareOp::eLess, // 1 is far plane 0 is near
+            .depthBoundsTestEnable = vk::False, // only keep fragments within specified depth range
+            .stencilTestEnable = vk::False // you'd need stencil component in depth/stencil image format
+        };
+
         // Dynamic (simplified) rendering setup
         vk::PipelineRenderingCreateInfo pipelineRenderingCreateInfo = {
             .colorAttachmentCount = 1,
-            .pColorAttachmentFormats = &swapSurfaceFormat.format
+            .pColorAttachmentFormats = &swapSurfaceFormat.format,
+            .depthAttachmentFormat = GetDepthFormat(),
         };
 
         vk::GraphicsPipelineCreateInfo pipelineInfo = {
@@ -672,8 +696,10 @@ private:
             .stageCount = 2, .pStages = shaderStages.data(),
             .pVertexInputState = &vertexInputInfo, .pInputAssemblyState = &inputAssembly,
             .pViewportState = &viewportState, .pRasterizationState = &rasterizer,
-            .pMultisampleState = &multiSampling, .pColorBlendState = &colorBlending,
+            .pMultisampleState = &multiSampling, .pDepthStencilState = &depthStencil,
+            .pColorBlendState = &colorBlending,
             .pDynamicState = &dynamicState, .layout = pipelineLayout,
+            
             .renderPass = nullptr, // dynamic rendering removes need for render pass
 
             // OPTIONAL, you can make pipelines derive from a similar pipeline to simplify and speedup creation, we're not doing that here so it's optional
@@ -710,14 +736,16 @@ private:
     // presenting has a diff layout than rendering (for optimization sake)
     void TransitionImageLayout(
         vk::raii::CommandBuffer& commandBuffer,
-        uint32_t imageIndex,
+        vk::Image image,
 
         vk::ImageLayout oldLayout,
         vk::ImageLayout newLayout,
         vk::AccessFlags2 srcAccessMask,
         vk::AccessFlags2 dstAccessMask,
         vk::PipelineStageFlags2 srcStageMask,
-        vk::PipelineStageFlags2 dstStageMask
+        vk::PipelineStageFlags2 dstStageMask,
+
+        vk::ImageAspectFlags imageAspectFlags
     ) {
         vk::ImageMemoryBarrier2 barrier = {
             .srcStageMask = srcStageMask,
@@ -728,9 +756,9 @@ private:
             .newLayout = newLayout,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = swapChainImages[imageIndex],
+            .image = image,
             .subresourceRange = {
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .aspectMask = imageAspectFlags,
                 .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1
             }
         };
@@ -749,16 +777,30 @@ private:
         // Transition to COLOR ATTACHMENT OPTIMAL
         TransitionImageLayout(
             commandBuffer,
-            imageIndex,
+            swapChainImages[imageIndex],
             vk::ImageLayout::eUndefined, // From any?
             vk::ImageLayout::eColorAttachmentOptimal, // To this format
             {}, // What access to wait for?  We don't wanna wait for anything
             vk::AccessFlagBits2::eColorAttachmentWrite,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput);
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::ImageAspectFlagBits::eColor);
 
-        vk::ClearColorValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
-        vk::RenderingAttachmentInfo attachmentInfo = {
+        // Transition the depth image to its optimal (from whatever it was we dont care)
+        TransitionImageLayout(
+            commandBuffer,
+            *depthImage,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eDepthAttachmentOptimal,
+            vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+            vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+            vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+            vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+            vk::ImageAspectFlagBits::eDepth
+        );
+
+        vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+        vk::RenderingAttachmentInfo colorAttachmentInfo = {
             .imageView = swapChainImageViews[imageIndex],
             .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
             .loadOp = vk::AttachmentLoadOp::eClear, // what to do before rendering?
@@ -766,11 +808,22 @@ private:
             .clearValue = clearColor
         };
 
+        vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
+        vk::RenderingAttachmentInfo depthAttachmentInfo = {
+            .imageView = depthImageView,
+            .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eDontCare, // no need to keep depth
+            .clearValue = clearDepth
+        };
+
         vk::RenderingInfo renderingInfo = {
             .renderArea = {.offset = {0,0}, .extent = swapChainExtent},
             .layerCount = 1,
             .colorAttachmentCount = 1,
-            .pColorAttachments = &attachmentInfo // Which color attachments we rendering to?
+            .pColorAttachments = &colorAttachmentInfo, // Which color attachments we rendering to?
+
+            .pDepthAttachment = &depthAttachmentInfo,
         };
 
         // START RENDER
@@ -797,13 +850,14 @@ private:
         // Have to transition image layout to presentable format
         TransitionImageLayout(
             commandBuffer,
-            imageIndex,
+            swapChainImages[imageIndex],
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::ImageLayout::ePresentSrcKHR,
             vk::AccessFlagBits2::eColorAttachmentWrite, // We wanna wait for writing ops
             {},
             vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::PipelineStageFlagBits2::eBottomOfPipe);
+            vk::PipelineStageFlagBits2::eBottomOfPipe,
+            vk::ImageAspectFlagBits::eColor);
 
         commandBuffer.end();
 
@@ -848,6 +902,8 @@ private:
 
         CreateSwapchain();
         CreateImageViews();
+
+        CreateDepthResources();
     }
 
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
@@ -1194,12 +1250,12 @@ private:
 
     }
 
-    ImageView CreateImageView(const Image& image, vk::Format format) {
+    ImageView CreateImageView(const Image& image, vk::Format format, vk::ImageAspectFlags aspectFlags = vk::ImageAspectFlagBits::eColor) {
         vk::ImageViewCreateInfo viewInfo = { 
-            .image = textureImage, 
+            .image = image, 
             .viewType = vk::ImageViewType::e2D, 
-            .format = vk::Format::eR8G8B8A8Srgb,
-            .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 } 
+            .format = format,
+            .subresourceRange = { aspectFlags, 0, 1, 0, 1 } 
         };
         return ImageView(device, viewInfo);
     }
@@ -1238,6 +1294,57 @@ private:
         textureSampler = Sampler(device, samplerInfo);
     }
 
+    vk::Format FindSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features) {
+        for (const auto format : candidates) {
+            vk::FormatProperties props = physicalDevice.getFormatProperties(format);
+        
+            if (
+                (tiling == vk::ImageTiling::eLinear && (props.linearTilingFeatures & features) == features) ||
+                (tiling == vk::ImageTiling::eOptimal && (props.optimalTilingFeatures & features) == features)
+                ) {
+                return format;
+            }
+        }
+
+        throw std::runtime_error("failed to find format");
+    }
+
+    // These formats must have stencil component
+    bool HasStencilComponent(vk::Format format) {
+        return format == vk::Format::eD32SfloatS8Uint 
+            || format == vk::Format::eD24UnormS8Uint;
+    }
+
+    vk::Format GetDepthFormat() {
+        return FindSupportedFormat(
+            { vk::Format::eD32Sfloat,
+            vk::Format::eD32SfloatS8Uint,
+            vk::Format::eD24UnormS8Uint },
+
+            vk::ImageTiling::eOptimal,
+            vk::FormatFeatureFlagBits::eDepthStencilAttachment
+        );
+    }
+
+    void CreateDepthResources() {
+        vk::Format depthFormat = GetDepthFormat();
+
+        CreateImage(
+            swapChainExtent.width, swapChainExtent.height, 
+            depthFormat, 
+            vk::ImageTiling::eOptimal, 
+            vk::ImageUsageFlagBits::eDepthStencilAttachment, 
+            vk::MemoryPropertyFlagBits::eDeviceLocal, 
+            &depthImage, &depthImageMemory);
+        assert(depthImage != nullptr);
+        depthImageView = CreateImageView(
+            depthImage, depthFormat, 
+            vk::ImageAspectFlagBits::eDepth);
+
+        // No need to fill up our copy or whatever our image once created
+        // We're going to clear it at start of render
+    }
+
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
@@ -1259,6 +1366,8 @@ private:
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
+
+        CreateDepthResources();
 
         CreateTextureImage();
         CreateTextureImageView();

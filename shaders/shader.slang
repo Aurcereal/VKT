@@ -7,7 +7,7 @@ struct UniformBuffer {
 ConstantBuffer<UniformBuffer> ubo;
 
 struct VSInput {
-    float2 position;
+    float3 position;
     float3 color;
     float2 uv;
 };
@@ -21,7 +21,7 @@ struct VSOutput {
 [shader("vertex")]
 VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
     VSOutput vOut;
-    float4 worldPos = mul(ubo.model, float4(vIn.position, 0.0, 1.0));
+    float4 worldPos = mul(ubo.model, float4(vIn.position, 1.0));
     worldPos.x += ubo.off*0.1;
     vOut.position = mul(ubo.proj, mul(ubo.view, worldPos));
     vOut.color = vIn.color;
