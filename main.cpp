@@ -38,7 +38,7 @@ using namespace glm;
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
-const string MODEL_PATH = "models/viking_room.obj";
+const string MODEL_PATH = "models/blob.obj";
 const string TEXTURE_PATH = "textures/viking_room.png";
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2; // Shouldn't be too many, don't want GPU to fall behind CPU
