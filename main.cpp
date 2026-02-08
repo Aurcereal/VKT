@@ -14,14 +14,21 @@ import vulkan_hpp;
 #include <stdexcept>
 #include <cstdlib>
 
+#include <chrono>
+
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // Force projection matrix to have (0,1) depth instead of (-1,1)
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <chrono>
+// We need these for our hash functinos
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/hash.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 
 #define U32T(v) (static_cast<uint32_t>(v))
 
@@ -31,6 +38,8 @@ using namespace glm;
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
+const string MODEL_PATH = "models/viking_room.obj";
+const string TEXTURE_PATH = "textures/viking_room.png";
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2; // Shouldn't be too many, don't want GPU to fall behind CPU
 
@@ -58,28 +67,43 @@ struct Vertex {
             vk::VertexInputAttributeDescription(2, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, uv))
         };
     }
+
+    bool operator==(const Vertex& other) const {
+        return pos == other.pos && color == other.color && uv == other.uv;
+    }
 };
 
-const vector<Vertex> vertices = {
-    {vec3(-0.5f, -0.5f, 0.0f), vec3(1.0f, 1.0f, 0.0f), vec2(0,0)},
-    {vec3(-0.5f, 0.5f, 0.0f), vec3(0.0f, 1.0f, 0.0f), vec2(0,1)},
-    {vec3(0.5f, -0.5f, 0.0f), vec3(0.0f, 0.0f, 1.0f), vec2(1,0)},
-    {vec3(0.5f, 0.5f, 0.0f), vec3(1.0f, 1.0f, 1.0f), vec2(1,1)},
+// Hash Function For Vertex
+namespace std {
+    template<> struct hash<Vertex> {
+        size_t operator()(Vertex const& vertex) const {
+            return ((hash<glm::vec3>()(vertex.pos) ^
+                (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+                (hash<glm::vec2>()(vertex.uv) << 1);
+        }
+    };
+}
 
-    {vec3(-0.5f, -0.5f, -.5f), vec3(1.0f, 1.0f, 0.0f), vec2(0,0)},
-    {vec3(-0.5f, 0.5f, -.5f), vec3(0.0f, 1.0f, 0.0f), vec2(0,1)},
-    {vec3(0.5f, -0.5f, -.5f), vec3(0.0f, 0.0f, 1.0f), vec2(1,0)},
-    {vec3(0.5f, 0.5f, -.5f), vec3(1.0f, 1.0f, 1.0f), vec2(1,1)},
-};
-
-// Need uint32_t for massive meshes
-const vector<uint16_t> indices = {
-    0, 1, 2,
-    1, 3, 2,
-
-    4, 5, 6,
-    5, 7, 6,
-};
+//const vector<Vertex> vertices = {
+//    {vec3(-0.5f, -0.5f, 0.0f), vec3(1.0f, 1.0f, 0.0f), vec2(0,0)},
+//    {vec3(-0.5f, 0.5f, 0.0f), vec3(0.0f, 1.0f, 0.0f), vec2(0,1)},
+//    {vec3(0.5f, -0.5f, 0.0f), vec3(0.0f, 0.0f, 1.0f), vec2(1,0)},
+//    {vec3(0.5f, 0.5f, 0.0f), vec3(1.0f, 1.0f, 1.0f), vec2(1,1)},
+//
+//    {vec3(-0.5f, -0.5f, -.5f), vec3(1.0f, 1.0f, 0.0f), vec2(0,0)},
+//    {vec3(-0.5f, 0.5f, .5f), vec3(0.0f, 1.0f, 0.0f), vec2(0,1)},
+//    {vec3(0.5f, -0.5f, .5f), vec3(0.0f, 0.0f, 1.0f), vec2(1,0)},
+//    {vec3(0.5f, 0.5f, .5f), vec3(1.0f, 1.0f, 1.0f), vec2(1,1)},
+//};
+//
+//// Need uint32_t for massive meshes
+//const vector<uint32_t> indices = {
+//    2, 1, 0,
+//    2, 3, 1,
+//
+//    6, 5, 4,
+//    6, 7, 5,
+//};
 
 static vector<char> readFile(const std::string& fileName) {
     std::ifstream file(fileName,
@@ -160,6 +184,9 @@ private:
     bool frameBufferResized = false;
 
     //
+    vector<Vertex> vertices;
+    vector<uint32_t> indices;
+
     Buffer vertexBuffer = nullptr;
     DeviceMemory vertexBufferMemory = nullptr;
     Buffer indexBuffer = nullptr;
@@ -176,7 +203,6 @@ private:
     DeviceMemory textureImageMemory = nullptr;
     ImageView textureImageView = nullptr;
     Sampler textureSampler = nullptr;
-    
 
 #ifdef NDEBUG // Not Debug, Part of C++ Standard
     const bool enableValidationLayers = false;
@@ -623,7 +649,7 @@ private:
             .rasterizerDiscardEnable = vk::False, // disables output to framebuffer
             .polygonMode = vk::PolygonMode::eFill, // could be used for lines or points (requires gpu feature for non fill)
             .cullMode = vk::CullModeFlagBits::eBack,
-            .frontFace = vk::FrontFace::eClockwise,
+            .frontFace = vk::FrontFace::eCounterClockwise,
             .depthBiasEnable = vk::False, // could alter depth vals based on const or frags slope or wtver
             .depthBiasSlopeFactor = 1.0f,
             .lineWidth = 1.0f // > 1 requires gpu feature
@@ -811,7 +837,7 @@ private:
         vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
         vk::RenderingAttachmentInfo depthAttachmentInfo = {
             .imageView = depthImageView,
-            .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+            .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
             .loadOp = vk::AttachmentLoadOp::eClear,
             .storeOp = vk::AttachmentStoreOp::eDontCare, // no need to keep depth
             .clearValue = clearDepth
@@ -833,10 +859,10 @@ private:
         // Bind Graphics Pipeline and Geo Data
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         commandBuffer.bindVertexBuffers(0, *vertexBuffer, { 0 }); // Bind buffer to our binding which has layout and stride stuff {0} is array of vertex buffers to bind
-        commandBuffer.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
+        commandBuffer.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint32);
 
         // remember in the pipeline we specified viewport and scissor state as dynamic, so we gotta specify them now
-        commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height)));
+        commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
         commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
 
         // graphics pipeline, pipeline layout descriptors r based on, index of first descriptor, array of sets to bind
@@ -1205,9 +1231,9 @@ private:
         SubmitOneTimeCommands(&cmd);
     }
 
-    void CreateTextureImage() {
+    void CreateTextureImage(const string& path) {
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load("textures/vulkanTutorialImage.jpg", 
+        stbi_uc* pixels = stbi_load(path.c_str(),
             &texWidth, &texHeight, &texChannels, 
             STBI_rgb_alpha); // Forces loading alpha channel even if one doesnt exist
         vk::DeviceSize imageByteSize = texWidth * texHeight * 4;
@@ -1345,6 +1371,45 @@ private:
         // We're going to clear it at start of render
     }
 
+    void LoadModel(const std::string& path) {
+        tinyobj::attrib_t attrib; // all vert attribs
+        vector<tinyobj::shape_t> shapes; // all separate objects and their faces
+        vector<tinyobj::material_t> materials; // material/texture per face (that we'll ignore)
+        string err;
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, path.c_str())) {
+            throw std::runtime_error(err);
+        }
+        // LoadObj will auto triangulate n-gons into triangles by default
+
+        // uniqueVerts[v] = Index of v in vertex buffer if exists
+        std::unordered_map<Vertex, uint32_t> uniqueVerts;
+
+        for (const auto& shape : shapes) {
+            for (const auto& index : shape.mesh.indices) {
+                Vertex vertex = {
+                    .pos = vec3(
+                        attrib.vertices[3 * index.vertex_index + 0],
+                        attrib.vertices[3 * index.vertex_index + 1],
+                        attrib.vertices[3 * index.vertex_index + 2]
+                    ),
+                    .color = vec3(1.0f),
+                    .uv = vec2(
+                        attrib.texcoords[2 * index.texcoord_index + 0],
+                        1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+                    ),
+                };
+
+                // Create vertex if doesn't exist
+                if (uniqueVerts.count(vertex) == 0) {
+                    vertices.push_back(vertex);
+                    uniqueVerts[vertex] = vertices.size() - 1;
+                }
+
+                indices.push_back(uniqueVerts[vertex]);
+            }
+        }
+    }
+
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
@@ -1363,13 +1428,14 @@ private:
 
         CreateSyncObjects();
 
+        LoadModel(MODEL_PATH);
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
 
         CreateDepthResources();
 
-        CreateTextureImage();
+        CreateTextureImage(TEXTURE_PATH);
         CreateTextureImageView();
         CreateTextureSampler();
 
@@ -1388,6 +1454,9 @@ private:
             .view = glm::lookAt(vec3(0,0,5), vec3(0), vec3(0,1,0)),
             .proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f), // TODO: increase far
         };
+        ubo.model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
         // glm::perspective outputs flipped y clip space, compensate
         ubo.proj[1][1] *= -1.0f;
         

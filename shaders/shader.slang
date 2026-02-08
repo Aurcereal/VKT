@@ -22,8 +22,10 @@ struct VSOutput {
 VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
     VSOutput vOut;
     float4 worldPos = mul(ubo.model, float4(vIn.position, 1.0));
-    worldPos.x += ubo.off*0.1;
+    // worldPos.x += ubo.off*0.1;
     vOut.position = mul(ubo.proj, mul(ubo.view, worldPos));
+    //vOut.position /= vOut.position.w;
+    //vOut.position.z = vOut.position.z * .5 + .5;
     vOut.color = vIn.color;
     vOut.uv = vIn.uv;
     return vOut;
@@ -35,5 +37,5 @@ Sampler2D texSampler;
 float4 fragMain(VSOutput o) : SV_Target
 {
     float3 color = o.color;
-    return texSampler.Sample(o.uv*2.);//float4(o.uv.x, o.uv.y, 0.0, 1.0);
+    return texSampler.Sample(o.uv);//float4(o.uv.x, o.uv.y, 0.0, 1.0);
 }
