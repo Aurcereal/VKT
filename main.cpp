@@ -54,22 +54,24 @@ struct Vertex {
     vec3 pos;
     vec3 color;
     vec2 uv;
+    vec3 norm;
 
     static vk::VertexInputBindingDescription getBindingDescription() {
         return { 0, sizeof(Vertex), vk::VertexInputRate::eVertex }; // binding index, stride, load data per vertex
     }
 
-    static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions() {
+    static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescriptions() {
         // Location, Binding Index
         return {
             vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, pos)),
             vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
-            vk::VertexInputAttributeDescription(2, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, uv))
+            vk::VertexInputAttributeDescription(2, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, uv)),
+            vk::VertexInputAttributeDescription(3, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, norm))
         };
     }
 
     bool operator==(const Vertex& other) const {
-        return pos == other.pos && color == other.color && uv == other.uv;
+        return pos == other.pos && color == other.color && uv == other.uv && norm == other.norm;
     }
 };
 
@@ -79,7 +81,8 @@ namespace std {
         size_t operator()(Vertex const& vertex) const {
             return ((hash<glm::vec3>()(vertex.pos) ^
                 (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
-                (hash<glm::vec2>()(vertex.uv) << 1);
+                (hash<glm::vec2>()(vertex.uv) << 1) ^ 
+                (hash<glm::vec3>()(vertex.norm) << 2);
         }
     };
 }
@@ -1058,7 +1061,7 @@ private:
                 0, // Binding index used in shader
                 vk::DescriptorType::eUniformBuffer, // Type 
                 1, // How many objects?
-                vk::ShaderStageFlagBits::eVertex, // Where can we reference 
+                vk::ShaderStageFlagBits::eAllGraphics, // Where can we reference 
                 nullptr), // Image sampling (later)
 
             vk::DescriptorSetLayoutBinding(
@@ -1397,6 +1400,11 @@ private:
                         attrib.texcoords[2 * index.texcoord_index + 0],
                         1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
                     ),
+                    .norm = vec3(
+                        attrib.normals[3 * index.normal_index + 0],
+                        attrib.normals[3 * index.normal_index + 1],
+                        attrib.normals[3 * index.normal_index + 2]
+                    ),
                 };
 
                 // Create vertex if doesn't exist
@@ -1454,10 +1462,10 @@ private:
             .view = glm::lookAt(vec3(0,0,5), vec3(0), vec3(0,1,0)),
             .proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f), // TODO: increase far
         };
-        ubo.model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        /*ubo.model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.view = lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
-        // glm::perspective outputs flipped y clip space, compensate
+     */   // glm::perspective outputs flipped y clip space, compensate
         ubo.proj[1][1] *= -1.0f;
         
         memcpy(uniformBuffersMapped[currFrame], &ubo, sizeof(ubo));
