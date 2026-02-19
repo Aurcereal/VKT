@@ -42,6 +42,16 @@ Sampler2D metallicSampler;
 Sampler2D roughnessSampler;
 Sampler2D aoSampler;
 
+struct Vertex {
+    float3 pos;
+    float3 color;
+    float2 uv;
+    float3 norm;
+};
+
+StructuredBuffer<Vertex> vertices;
+StructuredBuffer<int> indices;
+
 static float3 light_pos[4] = float3[](float3(-10, 10, 10),
                                       float3(10, 10, 10),
                                       float3(-10, -10, 10),
@@ -99,9 +109,33 @@ float4 fragMain(VSOutput o) : SV_Target
     //float3 color = o.color;
     //return texSampler.Sample(o.uv);//float4(o.uv.x, o.uv.y, 0.0, 1.0);
 
-    const float3 albedo = textureGammaCorrect(texSampler.Sample(o.uv).rgb); // float3(1.0,0.,0.);
-    const float metallic = metallicSampler.Sample(o.uv).r;                  // 1.0; // 0.5
-    const float roughness = roughnessSampler.Sample(o.uv).r;                // 0.1;
+    float3 sta = o.worldPos + norm * 0.05;
+    float3 reflRay = normalize(reflect(o.worldPos - camPos, norm));
+    float minDist = 10000.;
+    float2 uv = o.uv;
+    for (int i = 0; i < 7440; i += 3) {
+        Vertex vs[3] = Vertex[](vertices[indices[i]], vertices[indices[i+1]], vertices[indices[i+2]]);
+        // TODO: PUT VERTICES IN WORLD SPACE FOR NOW ( later should localize query to run bvh)
+        float3 cl = cross(vs[2].pos - vs[0].pos, vs[1].pos - vs[0].pos);
+        float3 oNorm = normalize(cl);
+
+        // Plane
+        float dist = -dot(oNorm, sta - vs[0].pos) / dot(oNorm, reflRay);
+        if (dist > 0.1 && dist < minDist) {
+            float3 hitPnt = sta = reflRay * dist;
+            float b2 = length(cross(hitPnt - vs[0].pos, hitPnt - vs[1].pos));
+            float b0 = length(cross(hitPnt - vs[1].pos, hitPnt - vs[2].pos));
+            float b1 = length(cross(hitPnt - vs[2].pos, hitPnt - vs[0].pos));
+            if (b0 + b1 + b2 <= length(cl)) {
+                float2 uv = b0 * vs[0].uv + b1 * vs[1].uv + b2 * vs[2].uv;
+                minDist = dist;
+            }
+        }
+    }
+
+    const float3 albedo = textureGammaCorrect(texSampler.Sample(uv).rgb); // float3(1.0,0.,0.);
+    const float metallic = metallicSampler.Sample(uv).r;                  // 1.0; // 0.5
+    const float roughness = roughnessSampler.Sample(uv).r;                // 0.1;
     const float ambientOcclusion = 0.;//aoSampler.Sample(o.uv).r;//0.;
 
     float3 Lo = float3(0.);

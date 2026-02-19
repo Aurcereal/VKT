@@ -12,9 +12,10 @@ public:
 	void* mappedMemory;
 	vk::raii::Buffer buffer = nullptr;
 	vk::raii::DeviceMemory bufferMemory = nullptr;
+	vk::DeviceSize bufferSize;
 private:
 	
-	vk::DeviceSize bufferSize;
+	
 
 	bool isMapped = false;
 };

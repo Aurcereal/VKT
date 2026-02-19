@@ -1,16 +1,15 @@
 #include "material.h"
 
-
 using namespace std;
 
-void Material::Create(const ShaderPipeline* pipeline, const vk::DescriptorPool& descriptorPool, const VulkanReferences& ref, const vector<WBuffer>& uniformBuffers, WTexture& albedo, WTexture& metallic, WTexture& roughness, WTexture& ao) {
+void Material::Create(const ShaderPipeline* pipeline, const vk::DescriptorPool& descriptorPool, const VulkanReferences& ref, const vector<WBuffer>& uniformBuffers, WTexture& albedo, WTexture& metallic, WTexture& roughness, WTexture& ao, array<WBuffer*, 2>& meshBuffers) {
     this->pipeline = pipeline;
 
     // Will probably need to do other stuff later too
-    CreateDescriptorSets(descriptorPool, ref, uniformBuffers, albedo, metallic, roughness, ao);
+    CreateDescriptorSets(descriptorPool, ref, uniformBuffers, albedo, metallic, roughness, ao, meshBuffers);
 }
 
-void Material::CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, const VulkanReferences& ref, const vector<WBuffer>& uniformBuffers, WTexture& albedo, WTexture& metallic, WTexture& roughness, WTexture& ao) {
+void Material::CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, const VulkanReferences& ref, const vector<WBuffer>& uniformBuffers, WTexture& albedo, WTexture& metallic, WTexture& roughness, WTexture& ao, array<WBuffer*, 2>& meshBuffers) {
     // Need to copy the layouts to make the descriptors
     vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *pipeline->descriptorSetLayout);
     vk::DescriptorSetAllocateInfo allocateInfo = {
@@ -54,6 +53,16 @@ void Material::CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, co
                 .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
             },
         };
+        vk::DescriptorBufferInfo vertexBufferInfo = {
+            .buffer = meshBuffers[0]->buffer,
+            .offset = 0,
+            .range = meshBuffers[0]->bufferSize
+        };
+        vk::DescriptorBufferInfo indexBufferInfo = {
+            .buffer = meshBuffers[1]->buffer,
+            .offset = 0,
+            .range = meshBuffers[1]->bufferSize
+        };
 
         std::array descriptorWrites = {
             vk::WriteDescriptorSet {
@@ -96,7 +105,24 @@ void Material::CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, co
                 .descriptorCount = 1,
                 .descriptorType = vk::DescriptorType::eCombinedImageSampler,
                 .pImageInfo = &texturesInfo[3]
-            }
+            },
+
+            vk::WriteDescriptorSet{
+                .dstSet = descriptorSets[i],
+                .dstBinding = 5,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo = &vertexBufferInfo
+            },
+            vk::WriteDescriptorSet{
+                .dstSet = descriptorSets[i],
+                .dstBinding = 6,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo = &indexBufferInfo
+            },
         };
 
         ref.device.updateDescriptorSets(descriptorWrites, {});

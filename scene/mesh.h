@@ -5,10 +5,10 @@
 using namespace glm;
 
 struct Vertex {
-    vec3 pos;
-    vec3 color;
-    vec2 uv;
-    vec3 norm;
+    alignas(16) vec3 pos;
+    alignas(16) vec3 color;
+    alignas(8) vec2 uv;
+    alignas(16) vec3 norm;
 
     static vk::VertexInputBindingDescription getBindingDescription() {
         return { 0, sizeof(Vertex), vk::VertexInputRate::eVertex }; // binding index, stride, load data per vertex

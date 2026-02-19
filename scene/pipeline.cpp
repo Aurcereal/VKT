@@ -222,6 +222,19 @@ void ShaderPipeline::CreateDescriptorSetLayout(const VulkanReferences& ref) {
             1,
             vk::ShaderStageFlagBits::eFragment,
             nullptr),
+
+        vk::DescriptorSetLayoutBinding(
+            5,
+            vk::DescriptorType::eStorageBuffer,
+            1,
+            vk::ShaderStageFlagBits::eFragment,
+            nullptr),
+        vk::DescriptorSetLayoutBinding(
+            6,
+            vk::DescriptorType::eStorageBuffer,
+            1,
+            vk::ShaderStageFlagBits::eFragment,
+            nullptr),
     };
 
     vk::DescriptorSetLayoutCreateInfo layoutInfo = {

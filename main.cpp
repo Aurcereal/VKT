@@ -664,7 +664,7 @@ private:
 
         vertexBuffer.Create(coreReferences, bufferSize,
             vk::BufferUsageFlagBits::eVertexBuffer |
-            vk::BufferUsageFlagBits::eTransferDst,
+            vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
             vk::MemoryPropertyFlagBits::eDeviceLocal // Device local, can't map memory directly
         );
 
@@ -677,6 +677,7 @@ private:
 
     void CreateIndexBuffer() {
         vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+        std::cout << "\t" << indices.size() << std::endl;
 
         WBuffer stagingBuffer;
         stagingBuffer.Create(coreReferences, bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -684,7 +685,7 @@ private:
         memcpy(stagingBuffer.mappedMemory, indices.data(), bufferSize);
         stagingBuffer.UnmapMemory();
 
-        indexBuffer.Create(coreReferences, bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        indexBuffer.Create(coreReferences, bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
         indexBuffer.CopyFrom(coreReferences, stagingBuffer);
     }
@@ -706,7 +707,8 @@ private:
         // Inadequate descriptor pools may not be caught by validation layers
         std::array poolSize = {
             vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 100*MAX_FRAMES_IN_FLIGHT),
-            vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, 100*MAX_FRAMES_IN_FLIGHT)
+            vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, 100 * MAX_FRAMES_IN_FLIGHT),
+            vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 5*MAX_FRAMES_IN_FLIGHT)
         };
 
         // Pool Sizes denotes how many of each specific descriptor type we can allocate
@@ -884,7 +886,8 @@ private:
         CreateTextureImage(ao, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png");
 
         CreateDescriptorPool();
-        testMaterial.Create(&shaderPipeline, descriptorPool, coreReferences, uniformBuffers, testTexture, metallic, roughness, ao);
+        array<WBuffer*, 2> bs = { &vertexBuffer, &indexBuffer };
+        testMaterial.Create(&shaderPipeline, descriptorPool, coreReferences, uniformBuffers, testTexture, metallic, roughness, ao, bs);
     }
 
     void UpdateUniformBuffer(uint32_t currFrame) {
