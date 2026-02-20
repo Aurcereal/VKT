@@ -220,6 +220,7 @@ private:
         // Must support API Version >= 1.3
         bool isSuitable = physicalDevice.getProperties().apiVersion >= VK_API_VERSION_1_3;
         isSuitable = isSuitable && deviceFeatures.samplerAnisotropy;
+        isSuitable = isSuitable && deviceFeatures.geometryShader;
 
         // It must have a queue family that supports graphics calls (we assume it has presentation)
         auto queueFamilies = physicalDevice.getQueueFamilyProperties();
@@ -313,7 +314,7 @@ private:
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT // D
         >
             featureChain = {
-                {.features = {.samplerAnisotropy = true }}, // constructor for A,
+                {.features = {.geometryShader = true, .samplerAnisotropy = true }}, // constructor for A,
                 {.shaderDrawParameters = true}, // B
                 {.synchronization2 = true, .dynamicRendering = true}, // constructor for C, dynamic rendering is a modern simplification
                 {.extendedDynamicState = true}
@@ -572,6 +573,9 @@ private:
         // START RENDER
         // All record cmds return void so no error handling til we finished recording
         commandBuffer.beginRendering(renderingInfo);
+
+        // For getting prim index
+        commandBuffer.setPrimitiveRestartEnable(true);
 
         // Bind GraphGraphics Pipeline and Geo Data
         shaderPipeline.Bind(commandBuffer);

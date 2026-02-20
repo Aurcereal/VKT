@@ -21,6 +21,15 @@ struct VSOutput {
     float3 norm;
 };
 
+struct FSInput {
+    float4 position : SV_Position;
+    float3 worldPos;
+    float3 color;
+    float2 uv;
+    float3 norm;
+    uint primID : SV_PrimitiveID;
+};
+
 [shader("vertex")]
 VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
     VSOutput vOut;
@@ -50,7 +59,7 @@ struct Vertex {
 };
 
 StructuredBuffer<Vertex> vertices;
-StructuredBuffer<int> indices;
+StructuredBuffer<uint32_t> indices;
 
 static float3 light_pos[4] = float3[](float3(-10, 10, 10),
                                       float3(10, 10, 10),
@@ -100,7 +109,7 @@ float3 textureGammaCorrect(float3 texColor) {
 }
 
 [shader("fragment")]
-float4 fragMain(VSOutput o) : SV_Target
+float4 fragMain(FSInput o) : SV_Target
 {
     float4x4 viewTranspose = transpose(ubo.view);
     float3 camPos = -mul(float3x3(viewTranspose), viewTranspose[3].xyz);
@@ -109,29 +118,51 @@ float4 fragMain(VSOutput o) : SV_Target
     //float3 color = o.color;
     //return texSampler.Sample(o.uv);//float4(o.uv.x, o.uv.y, 0.0, 1.0);
 
-    float3 sta = o.worldPos + norm * 0.05;
+    float3 sta = o.worldPos + norm * 0.01;
     float3 reflRay = normalize(reflect(o.worldPos - camPos, norm));
     float minDist = 10000.;
     float2 uv = o.uv;
-    for (int i = 0; i < 7440; i += 3) {
+    for (uint32_t i = 0; i < 7440; i += 3) {
         Vertex vs[3] = Vertex[](vertices[indices[i]], vertices[indices[i+1]], vertices[indices[i+2]]);
+        float3 vp[3] = float3[](
+            mul(ubo.model, float4(vs[0].pos, 1.)).xyz,
+            mul(ubo.model, float4(vs[1].pos, 1.)).xyz,
+            mul(ubo.model, float4(vs[2].pos, 1.)).xyz
+        );
         // TODO: PUT VERTICES IN WORLD SPACE FOR NOW ( later should localize query to run bvh)
-        float3 cl = cross(vs[2].pos - vs[0].pos, vs[1].pos - vs[0].pos);
+        float3 cl = cross(vp[2] - vp[0], vp[1] - vp[0]);
+        float area = 0.5 * length(cl);
         float3 oNorm = normalize(cl);
-
+        
         // Plane
-        float dist = -dot(oNorm, sta - vs[0].pos) / dot(oNorm, reflRay);
-        if (dist > 0.1 && dist < minDist) {
-            float3 hitPnt = sta = reflRay * dist;
-            float b2 = length(cross(hitPnt - vs[0].pos, hitPnt - vs[1].pos));
-            float b0 = length(cross(hitPnt - vs[1].pos, hitPnt - vs[2].pos));
-            float b1 = length(cross(hitPnt - vs[2].pos, hitPnt - vs[0].pos));
-            if (b0 + b1 + b2 <= length(cl)) {
-                float2 uv = b0 * vs[0].uv + b1 * vs[1].uv + b2 * vs[2].uv;
+        float dist = -dot(oNorm, sta - vp[0]) / dot(oNorm, reflRay);
+        if (dist > 0.01 && dist < minDist) {
+            float3 hitPnt = sta + reflRay * dist;
+            float b2 = 0.5*length(cross(hitPnt - vp[0], hitPnt - vp[1]));
+            float b0 = 0.5*length(cross(hitPnt - vp[1], hitPnt - vp[2]));
+            float b1 = 0.5*length(cross(hitPnt - vp[2], hitPnt - vp[0]));
+            if (b0 + b1 + b2 <= area) {
+                uv = (b0 * vs[0].uv + b1 * vs[1].uv + b2 * vs[2].uv)/area;
                 minDist = dist;
             }
         }
     }
+
+    // Vertex vs[3] = Vertex[](vertices[indices[o.primID * 3 + 0]], vertices[indices[o.primID * 3 + 1]], vertices[indices[o.primID * 3 + 2]]);
+    // float3 vp[3] = float3[](
+    //     mul(ubo.model, float4(vs[0].pos, 1.)).xyz,
+    //     mul(ubo.model, float4(vs[1].pos, 1.)).xyz,
+    //     mul(ubo.model, float4(vs[2].pos, 1.)).xyz
+    //     );
+    // float b2 = 0.5 * length(cross(o.worldPos - vp[0], o.worldPos - vp[1]));
+    // float b0 = 0.5 * length(cross(o.worldPos - vp[1], o.worldPos - vp[2]));
+    // float b1 = 0.5 * length(cross(o.worldPos - vp[2], o.worldPos - vp[0]));
+    // float area = 0.5 * length(cross(vp[2] - vp[0], vp[2] - vp[1]));
+    // uv = (b0 * vs[0].uv + b1 * vs[1].uv + b2 * vs[2].uv)/area;
+    // float dd = 100. * dot(cross(vp[2] - vp[0], vp[1] - vp[0]), o.worldPos - vp[0]);
+    // if (dd == 0.) {
+    //     dd = 100.;
+    // }
 
     const float3 albedo = textureGammaCorrect(texSampler.Sample(uv).rgb); // float3(1.0,0.,0.);
     const float metallic = metallicSampler.Sample(uv).r;                  // 1.0; // 0.5

@@ -73,7 +73,8 @@ void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, con
     };
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly = {
-        .topology = vk::PrimitiveTopology::eTriangleList
+        .topology = vk::PrimitiveTopology::eTriangleList,
+        //.primitiveRestartEnable = true
     };
 
     // Static examples below, but we're using dynamic so no need to specify
