@@ -148,22 +148,6 @@ float4 fragMain(FSInput o) : SV_Target
         }
     }
 
-    // Vertex vs[3] = Vertex[](vertices[indices[o.primID * 3 + 0]], vertices[indices[o.primID * 3 + 1]], vertices[indices[o.primID * 3 + 2]]);
-    // float3 vp[3] = float3[](
-    //     mul(ubo.model, float4(vs[0].pos, 1.)).xyz,
-    //     mul(ubo.model, float4(vs[1].pos, 1.)).xyz,
-    //     mul(ubo.model, float4(vs[2].pos, 1.)).xyz
-    //     );
-    // float b2 = 0.5 * length(cross(o.worldPos - vp[0], o.worldPos - vp[1]));
-    // float b0 = 0.5 * length(cross(o.worldPos - vp[1], o.worldPos - vp[2]));
-    // float b1 = 0.5 * length(cross(o.worldPos - vp[2], o.worldPos - vp[0]));
-    // float area = 0.5 * length(cross(vp[2] - vp[0], vp[2] - vp[1]));
-    // uv = (b0 * vs[0].uv + b1 * vs[1].uv + b2 * vs[2].uv)/area;
-    // float dd = 100. * dot(cross(vp[2] - vp[0], vp[1] - vp[0]), o.worldPos - vp[0]);
-    // if (dd == 0.) {
-    //     dd = 100.;
-    // }
-
     const float3 albedo = textureGammaCorrect(texSampler.Sample(uv).rgb); // float3(1.0,0.,0.);
     const float metallic = metallicSampler.Sample(uv).r;                  // 1.0; // 0.5
     const float roughness = roughnessSampler.Sample(uv).r;                // 0.1;

@@ -37,6 +37,7 @@ void Material::CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, co
     // Configure descriptor sets
     for (size_t i = 0; i < layouts.size(); i++) {
         vector<WDescriptorSet> ss;
+        ss.reserve(parameters.size()*3);
         vector<vk::WriteDescriptorSet> ssWriters;
         for (uint j = 0; j < parameters.size(); j++) {
             auto& param = parameters[j];
@@ -63,7 +64,7 @@ void Material::CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, co
                 break;
             case ShaderParameter::Type::SAMPLER:
                 ss.push_back({
-                    .imageInfo = {
+                     vk::DescriptorImageInfo{
                         .sampler = param.sampler.texture->GetSampler(),
                         .imageView = param.sampler.texture->view,
                         .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal // ASSUMING READONLY TEXTURE TODO: MAYBE CHANGE
@@ -75,24 +76,24 @@ void Material::CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, co
                     .dstArrayElement = 0,
                     .descriptorCount = 1,
                     .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                    .pImageInfo = &(ss[ss.size() - 1].imageInfo)
+                    .pImageInfo = &std::get<vk::DescriptorImageInfo>(ss[ss.size() - 1])
                 });
                 break;
             case ShaderParameter::Type::BUFFER:
-                ss.push_back({
-                    .bufferInfo = {
-                        .buffer = (*(param.uniform.uniformBuffers))[i].buffer,
+                ss.push_back(
+                    vk::DescriptorBufferInfo{
+                        .buffer = param.buffer.buffer->buffer,
                         .offset = 0,
-                        .range = (*(param.uniform.uniformBuffers))[i].bufferSize
+                        .range = param.buffer.buffer->bufferSize
                     }
-                });
+                );
                 ssWriters.push_back({
                     .dstSet = descriptorSets[i],
                     .dstBinding = j,
                     .dstArrayElement = 0,
                     .descriptorCount = 1,
                     .descriptorType = vk::DescriptorType::eStorageBuffer,
-                    .pBufferInfo = &(ss[ss.size() - 1].bufferInfo)
+                    .pBufferInfo = &std::get<vk::DescriptorBufferInfo>(ss[ss.size() - 1])
                 });
                 break;
             }
