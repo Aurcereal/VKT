@@ -9,23 +9,30 @@ void WTexture::Create(const VulkanReferences& ref,
     vk::ImageTiling tiling,
     vk::ImageUsageFlags usage,
     vk::MemoryPropertyFlags properties, 
-    vk::ImageAspectFlags imageViewAspectFlags) {
+    vk::ImageAspectFlags imageViewAspectFlags, uint32_t arrayLayerCount, bool cubeMap) {
+
+    assert(!isCreated);
+    isCreated = true;
 
     this->width = width;
     this->height = height;
     this->format = format;
+    this->arrayLayerCount = arrayLayerCount;
 
     vk::ImageCreateInfo imageInfo = {
         .imageType = vk::ImageType::e2D,
         .format = format, // Same format as pixels in staging buffer
         .extent = {width, height, 1},
         .mipLevels = 1,
-        .arrayLayers = 1,
+        .arrayLayers = arrayLayerCount,
         .samples = vk::SampleCountFlagBits::e1, // could be used to store sparsely, useful for 3D textures of voxel terrain with lots of air
         .tiling = tiling, // how to arrange texels Optimal = Implementation Dependent, Efficient while Linear = Linearly laid out rows (limited)
         .usage = usage,
-        .sharingMode = vk::SharingMode::eExclusive
+        .sharingMode = vk::SharingMode::eExclusive,
     };
+    if (cubeMap) {
+        imageInfo.flags = vk::ImageCreateFlagBits::eCubeCompatible;
+    }
     image = Image(ref.device, imageInfo);
 
     vk::MemoryRequirements memRequirements = image.getMemoryRequirements();
@@ -35,19 +42,123 @@ void WTexture::Create(const VulkanReferences& ref,
     memory = vk::raii::DeviceMemory(ref.device, allocInfo);
     image.bindMemory(memory, 0);
 
-    CreateImageView(ref, imageViewAspectFlags);
+    if (cubeMap) {
+        CreateCubeMapImageView(ref, imageViewAspectFlags);
+    }
+    else {
+        CreateImageView(ref, imageViewAspectFlags);
+    }
 }
 
-void WTexture::CopyFromBuffer(const VulkanReferences& ref, const WBuffer& buffer) {
+void WTexture::CreateFromFile(const VulkanReferences& ref, const std::string& path, 
+    vk::Format format,
+    vk::ImageTiling tiling,
+    vk::ImageUsageFlags usage,
+    vk::MemoryPropertyFlags properties, vk::ImageAspectFlags imageViewAspectFlags) 
+{
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load(path.c_str(),
+        &texWidth, &texHeight, &texChannels,
+        STBI_rgb_alpha); // Forces loading alpha channel even if one doesnt exist
+    vk::DeviceSize imageByteSize = texWidth * texHeight * 4;
+
+    if (!pixels) {
+        throw std::runtime_error("failed to load texture image");
+    }
+
+    // Staging to get the actual data closer to GPU (which we cant directly write to ig)
+    WBuffer stagingBuffer;
+    stagingBuffer.Create(ref, imageByteSize,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    stagingBuffer.MapMemory();
+    memcpy(stagingBuffer.mappedMemory, pixels, imageByteSize);
+    stagingBuffer.UnmapMemory();
+
+    stbi_image_free(pixels);
+    pixels = nullptr;
+
+    // We want to copy from the image staging buffer to an image (not just a buffer)
+    Create(ref, texWidth, texHeight,
+        vk::Format::eR8G8B8A8Srgb,
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    // We need to transition this image through multiple layouts
+    // Undefined -> Optimized for Receiving Data -> Optimized for Shader Reading
+    TransitionImageLayoutHardcoded(ref, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+    CopyFromBuffer(ref, stagingBuffer);
+    TransitionImageLayoutHardcoded(ref, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    CreateSampler(ref);
+
+}
+
+void WTexture::CreateCubeMapFromFiles(const VulkanReferences& ref, std::array<std::string, 6> paths, 
+    vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::ImageAspectFlags imageViewAspectFlags) {
+
+    // Load Pixel Data
+    std::array<stbi_uc*, 6> pixelArrays;
+    int texWidth = -1, texHeight = -1, texChannels;
+    for (int i = 0; i < 6; i++) {
+        int ptw = texWidth; int pth = texHeight;
+        pixelArrays[i] = stbi_load(paths[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        assert(i == 0 || (texWidth == ptw && texHeight == pth)); // All images should be same
+
+        if (!pixelArrays[i]) {
+            throw std::runtime_error("failed to load texture image");
+        }
+    }
+    vk::DeviceSize bytesPerLayer = texWidth * texHeight * 4;
+
+    // Put Pixel Data into Buffer
+    WBuffer stagingBuffer;
+    stagingBuffer.Create(ref, 6*bytesPerLayer,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    stagingBuffer.MapMemory();
+    for (int i = 0; i < 6; i++) {
+        memcpy(static_cast<stbi_uc*>(stagingBuffer.mappedMemory) + i * bytesPerLayer, pixelArrays[i], bytesPerLayer);
+    }
+    stagingBuffer.UnmapMemory();
+
+    // Free CPU Pixel Data
+    for (int i = 0; i < 6; i++) {
+        stbi_image_free(pixelArrays[i]);
+        pixelArrays[i] = nullptr;
+    }
+
+    // Create Image
+    Create(ref, texWidth, texHeight, format, vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal, vk::ImageAspectFlagBits::eColor, 6, true);
+
+    // Transition to Optimal Transferring Layout, then copy from buffer, then transition to optimal shader reading layout
+    TransitionImageLayoutHardcoded(ref, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+    for (int i = 0; i < 6; i++) {
+        CopyFromBuffer(ref, stagingBuffer, bytesPerLayer * i, i);
+    }
+    TransitionImageLayoutHardcoded(ref, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    CreateSampler(ref);
+}
+
+void WTexture::CopyFromBuffer(const VulkanReferences& ref, const WBuffer& buffer, vk::DeviceSize bufferOffset, uint32_t arrayLayer) {
     CommandBuffer cmd = BeginOneTimeCommands(ref);
 
     vk::BufferImageCopy region = {
-        .bufferOffset = 0,
+        .bufferOffset = bufferOffset,
         .bufferRowLength = 0, // 0 implies tightly packed
         .bufferImageHeight = 0,
 
         // where to copy the pixels to?
-        .imageSubresource = { vk::ImageAspectFlagBits::eColor, 0, 0, 1 },
+        .imageSubresource = { 
+            .aspectMask = vk::ImageAspectFlagBits::eColor, 
+            .mipLevel = 0, 
+            .baseArrayLayer = arrayLayer, 
+            .layerCount = 1 
+        },
         .imageOffset = {0, 0, 0},
         .imageExtent = {width, height, 1}
     };
@@ -58,6 +169,7 @@ void WTexture::CopyFromBuffer(const VulkanReferences& ref, const WBuffer& buffer
 }
 
 // Hardcoded src, dst access mask as well as src, dst stage (src is what must be done before barrier, and barrier must be done before dst)
+// TODO: ASSUMING COLOR BAD FOR DEPTH TEX
 void WTexture::TransitionImageLayoutHardcoded(const VulkanReferences& ref, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
     auto cmd = BeginOneTimeCommands(ref);
 
@@ -65,7 +177,7 @@ void WTexture::TransitionImageLayoutHardcoded(const VulkanReferences& ref, vk::I
         .oldLayout = oldLayout,
         .newLayout = newLayout,
         .image = image,
-        .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }
+        .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, arrayLayerCount }
     };
 
     // SourceStage which pipeline stages must happen before barrier
@@ -107,8 +219,9 @@ void WTexture::CreateSampler(const VulkanReferences& ref) {
         .mipmapMode = vk::SamplerMipmapMode::eLinear,
 
 
-        .addressModeU = vk::SamplerAddressMode::eRepeat,
+        .addressModeU = vk::SamplerAddressMode::eRepeat, // add choice
         .addressModeV = vk::SamplerAddressMode::eRepeat,
+        .addressModeW = vk::SamplerAddressMode::eRepeat, // break?
 
         .anisotropyEnable = vk::True, // One frag sampling from lots of texels, auto and nice
         .maxAnisotropy = ref.physicalDevice.getProperties().limits.maxSamplerAnisotropy,
@@ -137,6 +250,16 @@ void WTexture::CreateImageView(const VulkanReferences& ref, vk::ImageAspectFlags
         .viewType = vk::ImageViewType::e2D,
         .format = format,
         .subresourceRange = { aspectFlags, 0, 1, 0, 1 }
+    };
+    view = ImageView(ref.device, viewInfo);
+}
+
+void WTexture::CreateCubeMapImageView(const VulkanReferences& ref, vk::ImageAspectFlags aspectFlags) {
+    vk::ImageViewCreateInfo viewInfo = {
+        .image = image,
+        .viewType = vk::ImageViewType::eCube,
+        .format = format,
+        .subresourceRange = { aspectFlags, 0, 1, 0, 6 }
     };
     view = ImageView(ref.device, viewInfo);
 }

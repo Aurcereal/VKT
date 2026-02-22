@@ -61,6 +61,8 @@ struct Vertex {
 StructuredBuffer<Vertex> vertices;
 StructuredBuffer<uint32_t> indices;
 
+SamplerCube skybox;
+
 static float3 light_pos[4] = float3[](float3(-10, 10, 10),
                                       float3(10, 10, 10),
                                       float3(-10, -10, 10),
@@ -115,11 +117,9 @@ float4 fragMain(FSInput o) : SV_Target
     float3 camPos = -mul(float3x3(viewTranspose), viewTranspose[3].xyz);
     float3 norm = normalize(o.norm);//normalize(o.worldPos); // for sphere for now, but get normals and test them soon
 
-    //float3 color = o.color;
-    //return texSampler.Sample(o.uv);//float4(o.uv.x, o.uv.y, 0.0, 1.0);
-
     float3 sta = o.worldPos + norm * 0.01;
     float3 reflRay = normalize(reflect(o.worldPos - camPos, norm));
+    float3 skyCol = skybox.Sample(reflRay).rgb;
     float minDist = 10000.;
     float2 uv = o.uv;
     for (uint32_t i = 0; i < 7440; i += 3) {
@@ -190,6 +190,6 @@ float4 fragMain(FSInput o) : SV_Target
 
     float3 col = gammaCorrect(reinhardOp(Lo));
 
-    return float4(col, 1.);
+    return float4(skyCol, 1.);
 
 }

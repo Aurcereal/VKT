@@ -96,6 +96,7 @@ private:
     WTexture metallic;
     WTexture roughness;
     WTexture ao;
+    WTexture testCubeMap;
 
 #ifdef NDEBUG // Not Debug, Part of C++ Standard
     const bool enableValidationLayers = false;
@@ -730,46 +731,6 @@ private:
         descriptorPool = DescriptorPool(coreReferences.device, poolInfo);
     }
 
-    // TODO: Put this in texture.h make it a CreateFromFile function alternative to Create.. should also have isCreated variable mabye
-    void CreateTextureImage(WTexture& tex, const string& path) {
-        int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(path.c_str(),
-            &texWidth, &texHeight, &texChannels,
-            STBI_rgb_alpha); // Forces loading alpha channel even if one doesnt exist
-        vk::DeviceSize imageByteSize = texWidth * texHeight * 4;
-
-        if (!pixels) {
-            throw std::runtime_error("failed to load texture image");
-        }
-
-        // Staging to get the actual data closer to GPU (which we cant directly write to ig)
-        WBuffer stagingBuffer;
-        stagingBuffer.Create(coreReferences, imageByteSize,
-            vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-        stagingBuffer.MapMemory();
-        memcpy(stagingBuffer.mappedMemory, pixels, imageByteSize);
-        stagingBuffer.UnmapMemory();
-
-        stbi_image_free(pixels);
-
-        // We want to copy from the image staging buffer to an image (not just a buffer)
-        tex.Create(coreReferences, texWidth, texHeight,
-            vk::Format::eR8G8B8A8Srgb,
-            vk::ImageTiling::eOptimal,
-            vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-            vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-        // We need to transition this image through multiple layouts
-        // Undefined -> Optimized for Receiving Data -> Optimized for Shader Reading
-        tex.TransitionImageLayoutHardcoded(coreReferences, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-        tex.CopyFromBuffer(coreReferences, stagingBuffer);
-        tex.TransitionImageLayoutHardcoded(coreReferences, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-
-        tex.CreateSampler(coreReferences);
-
-    }
-
     vk::Format FindSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features) {
         for (const auto format : candidates) {
             vk::FormatProperties props = coreReferences.physicalDevice.getFormatProperties(format);
@@ -875,6 +836,8 @@ private:
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{ .type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+
         };
         shaderPipeline.Create(coreReferences, "shaders/slang.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams);
 
@@ -883,21 +846,30 @@ private:
 
         CreateSyncObjects();
 
-        LoadModel("models/morrisChair.obj");// two - case-MONEY_triang - LP.obj");// MODEL_PATH);
+        LoadModel("models/blob.obj");// two - case-MONEY_triang - LP.obj");// MODEL_PATH);
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
 
         CreateDepthResources();
 
-        /*CreateTextureImage(testTexture, "textures/case/case_BaseColor.tga.png");
-        CreateTextureImage(metallic, "textures/case/case_Metalness.tga.png");
-        CreateTextureImage(roughness, "textures/case/case_Roughness.tga.png");
-        CreateTextureImage(ao, "textures/case/case_ao.tga.png");*/
-        CreateTextureImage(testTexture, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png");
+        testTexture.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png", vk::Format::eR8G8B8A8Srgb);
+        metallic.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_Metallic.tga.png", vk::Format::eR8G8B8A8Srgb);
+        roughness.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_Roughness.tga.png", vk::Format::eR8G8B8A8Srgb);
+        ao.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png", vk::Format::eR8G8B8A8Srgb);
+        testCubeMap.CreateCubeMapFromFiles(coreReferences, {
+            "textures/envmaps/storforsen/posx.jpg",
+            "textures/envmaps/storforsen/negx.jpg",
+            "textures/envmaps/storforsen/posy.jpg",
+            "textures/envmaps/storforsen/negy.jpg",
+            "textures/envmaps/storforsen/posz.jpg",
+            "textures/envmaps/storforsen/negz.jpg"
+            }, vk::Format::eR8G8B8A8Srgb);
+
+        /*CreateTextureImage(testTexture, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png");
         CreateTextureImage(metallic, "textures/chair/morrisChair_bigChairMat_Metallic.tga.png");
         CreateTextureImage(roughness, "textures/chair/morrisChair_bigChairMat_Roughness.tga.png");
-        CreateTextureImage(ao, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png");
+        CreateTextureImage(ao, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png");*/
 
         CreateDescriptorPool();
         
@@ -910,6 +882,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &vertexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &indexBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap})
         };
         testMaterial.Create(&shaderPipeline, descriptorPool, coreReferences, materialParams);
     }
@@ -921,7 +894,7 @@ private:
 
         UniformBufferObject ubo = {
             .off = time,
-            .model = glm::scale(mat4(1.0f), vec3(0.014f)) * glm::rotate(mat4(1.0f), time, vec3(0.0f, 1.0f, 0.0f)),
+            .model = glm::scale(mat4(1.0f), vec3(1.0f)/*vec3(0.014f)*/) * glm::rotate(mat4(1.0f), time, vec3(0.0f, 1.0f, 0.0f)),
             .view = glm::lookAt(vec3(0,2,5), vec3(0), vec3(0,1,0)),
             .proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 1000.0f), // TODO: increase far
         };
