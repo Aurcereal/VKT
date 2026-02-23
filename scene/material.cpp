@@ -4,27 +4,21 @@
 
 using namespace std;
 
-//struct WDescriptorSet {
-//    union {
-//        vk::DescriptorImageInfo imageInfo;
-//        vk::DescriptorBufferInfo bufferInfo;
-//    };
-//};
-
 using WDescriptorSet = std::variant<vk::DescriptorImageInfo, vk::DescriptorBufferInfo>;
 
-void Material::Create(const ShaderPipeline* pipeline, const vk::DescriptorPool& descriptorPool, const VulkanReferences& ref, vector<ShaderParameter::MParameter>& parameters) {
+void Material::Create(const WPipeline* pipeline, const VulkanReferences& ref, const vector<ShaderParameter::MParameter>& parameters, int duplicationCount) {
     this->pipeline = pipeline;
+    this->duplicationCount = duplicationCount;
 
     // Will probably need to do other stuff later too
-    CreateDescriptorSets(descriptorPool, ref, parameters);
+    CreateDescriptorSets(ref, parameters);
 }
 
-void Material::CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, const VulkanReferences& ref, vector<ShaderParameter::MParameter>& parameters) {
+void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<ShaderParameter::MParameter>& parameters) {
     // Need to copy the layouts to make the descriptors
-    vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *pipeline->descriptorSetLayout);
+    vector<vk::DescriptorSetLayout> layouts(duplicationCount, *pipeline->descriptorSetLayout);
     vk::DescriptorSetAllocateInfo allocateInfo = {
-        .descriptorPool = descriptorPool,
+        .descriptorPool = ref.descriptorPool,
         .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
         .pSetLayouts = layouts.data()
     };
@@ -32,7 +26,7 @@ void Material::CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, co
     // Allocate
     descriptorSets.clear();
     descriptorSets = ref.device.allocateDescriptorSets(allocateInfo);
-    assert(descriptorSets.size() == MAX_FRAMES_IN_FLIGHT);
+    assert(descriptorSets.size() == duplicationCount);
 
     // Configure descriptor sets
     for (size_t i = 0; i < layouts.size(); i++) {
@@ -46,6 +40,7 @@ void Material::CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, co
 
             switch (param.type) {
             case ShaderParameter::Type::UNIFORM:
+                assert(param.uniform.uniformBuffers->size() == duplicationCount);
                 ss.push_back(
                     vk::DescriptorBufferInfo{
                         .buffer = (*(param.uniform.uniformBuffers))[i].buffer,

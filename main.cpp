@@ -89,7 +89,6 @@ private:
 
     vector<WBuffer> uniformBuffers; // Memory for each frame in flight so each frame can have diff uniform vals
 
-    DescriptorPool descriptorPool = nullptr;
     Material testMaterial;
 
     WTexture testTexture;
@@ -229,7 +228,8 @@ private:
 
         bool foundGraphicsFamily = false;
         for (const auto& queueFamily : queueFamilies) {
-            if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
+            // Require Graphics & Compute
+            if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics && queueFamily.queueFlags & vk::QueueFlagBits::eCompute) {
                 foundGraphicsFamily = true;
                 break;
             }
@@ -255,22 +255,22 @@ private:
         return isSuitable;
     }
 
-    void FindQueueFamilyIndices(const PhysicalDevice& physicalDevice, uint32_t* pGraphicsIndex, uint32_t* pPresentIndex) {
+    void FindQueueFamilyIndices(const PhysicalDevice& physicalDevice, uint32_t* pGraphicsAndComputeIndex, uint32_t* pPresentIndex) {
         auto queueFamilies = physicalDevice.getQueueFamilyProperties();
-        auto graphicsIter = std::ranges::find_if(queueFamilies, [&](const auto& qFamily) {
-            return (qFamily.queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0);
+        auto graphicsAndComputeIter = std::ranges::find_if(queueFamilies, [&](const auto& qFamily) {
+            return (qFamily.queueFlags & (vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eCompute)) != static_cast<vk::QueueFlags>(0);
             });
-        assert(graphicsIter != queueFamilies.end());
-        *pGraphicsIndex = static_cast<uint32_t>(std::distance(queueFamilies.begin(), graphicsIter));
-        *pPresentIndex = physicalDevice.getSurfaceSupportKHR(*pGraphicsIndex, *surface)
-            ? *pGraphicsIndex : U32T(queueFamilies.size());
+        assert(graphicsAndComputeIter != queueFamilies.end());
+        *pGraphicsAndComputeIndex = static_cast<uint32_t>(std::distance(queueFamilies.begin(), graphicsAndComputeIter));
+        *pPresentIndex = physicalDevice.getSurfaceSupportKHR(*pGraphicsAndComputeIndex, *surface)
+            ? *pGraphicsAndComputeIndex : U32T(queueFamilies.size());
 
         if (*pPresentIndex == queueFamilies.size()) {
             // GraphicsIndex != PresentIndex, find queue family supports both
             for (uint32_t i = 0; i < queueFamilies.size(); i++) {
                 if ((queueFamilies[i].queueFlags & vk::QueueFlagBits::eGraphics) != static_cast<vk::QueueFlags>(0)
                     && physicalDevice.getSurfaceSupportKHR(i, *surface)) {
-                    *pGraphicsIndex = i;
+                    *pGraphicsAndComputeIndex = i;
                     *pPresentIndex = i;
                     return;
                 }
@@ -295,15 +295,16 @@ private:
         }
         coreReferences.physicalDevice = *devIter;
         physicalDeviceProperties = coreReferences.physicalDevice.getProperties();
+        std::cout << "Max Compute Work Group Size: " << physicalDeviceProperties.limits.maxComputeWorkGroupSize[0] << std::endl;
     }
 
-    uint32_t graphicsIndex, presentIndex;
+    uint32_t graphicsAndComputeIndex, presentIndex;
     void CreateLogicalDevice() {
         // uint32_t graphicsIndex, presentIndex; // Very likely same qFamily
-        FindQueueFamilyIndices(coreReferences.physicalDevice, &graphicsIndex, &presentIndex);
+        FindQueueFamilyIndices(coreReferences.physicalDevice, &graphicsAndComputeIndex, &presentIndex);
         float queuePriority = 0.5f; // [0,1] mandatory even if 1 queue
         vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
-            .queueFamilyIndex = graphicsIndex, // Index within physical device
+            .queueFamilyIndex = graphicsAndComputeIndex, // Index within physical device
             .queueCount = 1,
             .pQueuePriorities = &queuePriority }; // For creating the graphics queue
         // We can only have a few queues per queue family, and we only really need one per family.  We can create cmd buffers on multiple threads and submit all of them on main thread with low overhead
@@ -331,9 +332,10 @@ private:
         }; // Device specific validation layers obsolete so not here
 
         coreReferences.device = Device(coreReferences.physicalDevice, deviceCreateInfo);
-        coreReferences.graphicsQueue = Queue(coreReferences.device, graphicsIndex, 0); // Get queue from our new device, 0 is the queue index within family, only 1 queue so we put 0
+        coreReferences.graphicsQueue = Queue(coreReferences.device, graphicsAndComputeIndex, 0); // Get queue from our new device, 0 is the queue index within family, only 1 queue so we put 0
+        coreReferences.computeQueue = Queue(coreReferences.device, graphicsAndComputeIndex, 0);
         presentQueue = Queue(coreReferences.device, presentIndex, 0);
-        cout << "Graphics Index: " << graphicsIndex << endl;
+        cout << "Graphics & Compute Index: " << graphicsAndComputeIndex << endl;
         cout << "Present Index: " << presentIndex << endl;
     }
 
@@ -411,8 +413,8 @@ private:
             .oldSwapchain = nullptr, // advanced, for when this chain becomes obselete (on resize) and we need a new one
         };
 
-        array<uint32_t, 2> queueFamilyIndices = { graphicsIndex, presentIndex };
-        if (graphicsIndex != presentIndex) {
+        array<uint32_t, 2> queueFamilyIndices = { graphicsAndComputeIndex, presentIndex };
+        if (graphicsAndComputeIndex != presentIndex) {
             swapChainCreateInfo.imageSharingMode = vk::SharingMode::eConcurrent; // Queues don't hog images when they need to share to drawing and presenting
             swapChainCreateInfo.queueFamilyIndexCount = 2;
             swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices.data(); // The family that owns the images
@@ -462,7 +464,7 @@ private:
     void CreateCommandPool() {
         vk::CommandPoolCreateInfo poolInfo = {
             .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, // cmd buffers in pool can be rerecorded individually instead of together
-            .queueFamilyIndex = graphicsIndex // all these cmd buffers are only for graphics
+            .queueFamilyIndex = graphicsAndComputeIndex // all these cmd buffers are only for graphics and compute
         };
         coreReferences.commandPool = vk::raii::CommandPool(coreReferences.device, poolInfo);
 
@@ -728,7 +730,7 @@ private:
             .poolSizeCount = poolSize.size(),
             .pPoolSizes = poolSize.data()
         };
-        descriptorPool = DescriptorPool(coreReferences.device, poolInfo);
+        coreReferences.descriptorPool = DescriptorPool(coreReferences.device, poolInfo);
     }
 
     vk::Format FindSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features) {
@@ -818,6 +820,67 @@ private:
         }
     }
 
+    void testCompute() {
+        uint32_t size = 551;
+        vk::DeviceSize byteSize = sizeof(int) * size;
+        vector<int> inData(size);
+        for (int i = 0; i < size; i++) {
+            inData[i] = i;
+        }
+
+        struct ComputeUniformData {
+            alignas(16) uvec3 invocationCount;
+        };
+        ComputeUniformData uniformData = {
+            .invocationCount = uvec3(size, 1, 1)
+        };
+
+        vector<WBuffer> uBuffer(1);
+        WBuffer inBuffer;
+        WBuffer outBuffer;
+
+        uBuffer[0].Create(coreReferences, sizeof(ComputeUniformData), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
+        uBuffer[0].MapMemory();
+        memcpy(uBuffer[0].mappedMemory, &uniformData, sizeof(ComputeUniformData));
+        uBuffer[0].UnmapMemory(); // One-time test
+
+        inBuffer.CreateDeviceLocalFromData(coreReferences, byteSize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, inData.data());
+        outBuffer.Create(coreReferences, byteSize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+        vector shaderParams = {
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
+        };
+
+        vector materialParams = {
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &inBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &outBuffer}),
+        };
+
+        ComputePipeline computeShader;
+        computeShader.Create(coreReferences, "shaders/slang2.spv", shaderParams, materialParams, uvec3(256, 1, 1));
+
+        ComputeDispatcher dispatcher;
+        dispatcher.Create(coreReferences);
+
+        dispatcher.StartRecord(coreReferences);
+        computeShader.EnqueueDispatch(&dispatcher, uvec3(size, 1, 1));
+        dispatcher.FinishRecordSubmit(coreReferences, true);
+
+        // Test retrieve
+        WBuffer receiveBuffer;
+        receiveBuffer.Create(coreReferences, byteSize, vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        receiveBuffer.CopyFrom(coreReferences, outBuffer, byteSize);
+
+        int* data = (int*) receiveBuffer.MapMemory();
+        for (int i = 0; i < size; i++) {
+            std::cout << data[i] << std::endl;
+        }
+
+    }
+
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
@@ -846,7 +909,7 @@ private:
 
         CreateSyncObjects();
 
-        LoadModel("models/blob.obj");// two - case-MONEY_triang - LP.obj");// MODEL_PATH);
+        LoadModel("models/morrisChair.obj");// two - case-MONEY_triang - LP.obj");// MODEL_PATH);
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
@@ -884,7 +947,9 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &indexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap})
         };
-        testMaterial.Create(&shaderPipeline, descriptorPool, coreReferences, materialParams);
+        testMaterial.Create(&shaderPipeline, coreReferences, materialParams);
+
+        testCompute();
     }
 
     void UpdateUniformBuffer(uint32_t currFrame) {
@@ -894,7 +959,7 @@ private:
 
         UniformBufferObject ubo = {
             .off = time,
-            .model = glm::scale(mat4(1.0f), vec3(1.0f)/*vec3(0.014f)*/) * glm::rotate(mat4(1.0f), time, vec3(0.0f, 1.0f, 0.0f)),
+            .model = glm::scale(mat4(1.0f), vec3(0.014f)) * glm::rotate(mat4(1.0f), time, vec3(0.0f, 1.0f, 0.0f)),
             .view = glm::lookAt(vec3(0,2,5), vec3(0), vec3(0,1,0)),
             .proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 1000.0f), // TODO: increase far
         };
@@ -904,6 +969,7 @@ private:
         // glm::perspective outputs flipped y clip space, compensate
         ubo.proj[1][1] *= -1.0f;
 
+        // TODO: how are we sure that the uniform buffer does get written to after this?  i think vulkan actually ensures the cpu data is same when mapped?
         memcpy(uniformBuffers[currFrame].mappedMemory, &ubo, sizeof(ubo));
     }
 
@@ -962,7 +1028,7 @@ private:
         vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
         const vk::SubmitInfo submitInfo = {
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &*presentCompleteSemaphore, // Wait for this semaphore to
+            .pWaitSemaphores = &*presentCompleteSemaphore, // Wait for this semaphore to signal
             .pWaitDstStageMask = &waitDstStageMask, // Write colors
 
             .commandBufferCount = 1,

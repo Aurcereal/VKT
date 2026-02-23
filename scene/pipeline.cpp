@@ -3,12 +3,13 @@
 #include <vector>
 #include "scene/resource-helper.h"
 #include "scene/mesh.h"
+#include "scene/material.h"
+#include "scene/shader-parameter.h"
 
 using namespace std;
 
-// TODO: make resource helper
 // [[nodiscard]] will make program throw error is programmer calls func without using return value
-[[nodiscard]] vk::raii::ShaderModule ShaderPipeline::CreateShaderModule(const VulkanReferences& ref, const string& path) {
+[[nodiscard]] vk::raii::ShaderModule WPipeline::CreateShaderModule(const VulkanReferences& ref, const string& path) {
     const vector<char> compiledCode = readFile(path);
 
     vk::ShaderModuleCreateInfo createInfo{
@@ -184,59 +185,12 @@ void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, con
     };
 
     // nullptr is PipelineCache object which stores creation info across multiple calls to create pipeline, speed up pipeline creation significantly
-    graphicsPipeline = vk::raii::Pipeline(ref.device, nullptr, pipelineInfo);
+    pipeline = vk::raii::Pipeline(ref.device, nullptr, pipelineInfo);
 
 }
 
-void ShaderPipeline::CreateDescriptorSetLayout(const VulkanReferences& ref, const vector<ShaderParameter::SParameter>& parameters) {
-    // Layout of descriptor set (sorta pointers to uniforms)
-    //array bindings = {
-    //    vk::DescriptorSetLayoutBinding(
-    //        0, // Binding index used in shader
-    //        vk::DescriptorType::eUniformBuffer, // Type 
-    //        1, // How many objects?
-    //        vk::ShaderStageFlagBits::eAllGraphics, // Where can we reference 
-    //        nullptr), // Image sampling (later)
-
-    //    vk::DescriptorSetLayoutBinding(
-    //        1,
-    //        vk::DescriptorType::eCombinedImageSampler,
-    //        1,
-    //        vk::ShaderStageFlagBits::eFragment,
-    //        nullptr),
-    //    vk::DescriptorSetLayoutBinding(
-    //        2,
-    //        vk::DescriptorType::eCombinedImageSampler,
-    //        1,
-    //        vk::ShaderStageFlagBits::eFragment,
-    //        nullptr),
-    //    vk::DescriptorSetLayoutBinding(
-    //        3,
-    //        vk::DescriptorType::eCombinedImageSampler,
-    //        1,
-    //        vk::ShaderStageFlagBits::eFragment,
-    //        nullptr),
-    //    vk::DescriptorSetLayoutBinding(
-    //        4,
-    //        vk::DescriptorType::eCombinedImageSampler,
-    //        1,
-    //        vk::ShaderStageFlagBits::eFragment,
-    //        nullptr),
-
-    //    vk::DescriptorSetLayoutBinding(
-    //        5,
-    //        vk::DescriptorType::eStorageBuffer,
-    //        1,
-    //        vk::ShaderStageFlagBits::eFragment,
-    //        nullptr),
-    //    vk::DescriptorSetLayoutBinding(
-    //        6,
-    //        vk::DescriptorType::eStorageBuffer,
-    //        1,
-    //        vk::ShaderStageFlagBits::eFragment,
-    //        nullptr),
-    //};
-
+void WPipeline::CreateDescriptorSetLayout(const VulkanReferences& ref, const vector<ShaderParameter::SParameter>& parameters) {
+    // Layout of descriptor set (pointers to uniform data)
     vector<vk::DescriptorSetLayoutBinding> bindingLayouts;
     for (int i = 0; i < parameters.size(); i++) {
         vk::DescriptorType dType;
@@ -260,8 +214,60 @@ void ShaderPipeline::CreateDescriptorSetLayout(const VulkanReferences& ref, cons
 }
 
 void ShaderPipeline::Bind(const vk::raii::CommandBuffer& cmd) {
-    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
 }
 void ShaderPipeline::BindDescriptorSets(const vk::raii::CommandBuffer& cmd, const vk::raii::DescriptorSet& descriptorSet) {
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSet, nullptr);
+}
+
+void ComputePipeline::Create(const VulkanReferences& ref, const string& path, const vector<ShaderParameter::SParameter>& parameters, const vector<ShaderParameter::MParameter>& parameterData, uvec3 workGroupSize) {
+    this->workGroupSize = workGroupSize;
+
+    //
+    auto computeModule = CreateShaderModule(ref, path);
+
+    vk::PipelineShaderStageCreateInfo computeShaderStageInfo{
+        .stage = vk::ShaderStageFlagBits::eCompute,
+        .module = computeModule,
+        .pName = "main" // Name of main func in shader
+    };
+
+    for (const auto& param : parameters) {
+        assert((param.visibility & vk::ShaderStageFlagBits::eCompute) == vk::ShaderStageFlagBits::eCompute);
+    }
+    assert(descriptorSetLayout == nullptr);
+    CreateDescriptorSetLayout(ref, parameters);
+    assert(descriptorSetLayout != nullptr);
+
+    vk::PipelineLayoutCreateInfo layoutInfo = {
+        .setLayoutCount = 1,
+        .pSetLayouts = &*descriptorSetLayout,
+        .pushConstantRangeCount = 0
+    };
+
+    pipelineLayout = PipelineLayout(ref.device, layoutInfo);
+
+    vk::ComputePipelineCreateInfo pipelineInfo = {
+        .stage = computeShaderStageInfo,
+        .layout = pipelineLayout
+    };
+
+    pipeline = ref.device.createComputePipeline(nullptr, pipelineInfo);
+
+    //
+    computeMaterial = mkU<Material>();
+    computeMaterial->Create(this, ref, parameterData, 1);
+
+    //
+    this->isCreated = true;
+}
+
+void ComputePipeline::EnqueueDispatch(ComputeDispatcher* dispatcher, uvec3 totalThreadCount) {
+    assert(isCreated);
+
+    dispatcher->cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *pipeline);
+    dispatcher->cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *pipelineLayout, 0, *(computeMaterial->descriptorSets[0]), nullptr);
+
+    uvec3 workGroupCount = ceil(vec3(totalThreadCount) / vec3(workGroupSize));
+    dispatcher->cmd.dispatch(workGroupCount.x, workGroupCount.y, workGroupCount.z);
 }

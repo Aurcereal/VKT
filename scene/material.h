@@ -7,16 +7,19 @@
 #include "scene/texture.h"
 #include "scene/shader-parameter.h"
 
+class WPipeline;
+
 using namespace glm;
 
 class Material {
 public:
-	void Create(const ShaderPipeline*, const vk::DescriptorPool&, const VulkanReferences&, vector<ShaderParameter::MParameter>& parameters);// WTexture&, WTexture&, WTexture&, WTexture&, array<WBuffer*, 2>& meshBuffers);
+	void Create(const WPipeline*, const VulkanReferences&, const vector<ShaderParameter::MParameter>& parameters, int duplicationCount = MAX_FRAMES_IN_FLIGHT);// WTexture&, WTexture&, WTexture&, WTexture&, array<WBuffer*, 2>& meshBuffers);
 	vector<vk::raii::DescriptorSet> descriptorSets;
 private:
-	void CreateDescriptorSets(const vk::DescriptorPool& descriptorPool, const VulkanReferences& ref, vector<ShaderParameter::MParameter>& parameters);// WTexture&, WTexture&, WTexture&, WTexture&, array<WBuffer*, 2>& meshBuffers);
+	void CreateDescriptorSets(const VulkanReferences&, const vector<ShaderParameter::MParameter>& parameters);// WTexture&, WTexture&, WTexture&, WTexture&, array<WBuffer*, 2>& meshBuffers);
 
-	const ShaderPipeline* pipeline;
+	const WPipeline* pipeline;
+	int duplicationCount;
 };
 
 struct UniformBufferObject {
