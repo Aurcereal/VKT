@@ -34,9 +34,10 @@ public:
     void Create(const VulkanReferences& ref, const string& path, const vector<ShaderParameter::SParameter>& parameters, const vector<ShaderParameter::MParameter>& parameterData, uvec3 workGroupSize);
     // void DispatchImmediate(bool waitForComplete = true, uvec3 totalThreadCount);
     void EnqueueDispatch(ComputeDispatcher*, uvec3 threadSize); // wait but can't do arb compute shaders in different cmd buffers maybe info on it or smth NVM i think its ALL GOOD binding n shit is a cmd buf command
+
 private:
     // Full definition required for member variables that aren't uPtrs since size needs to be known
-    uPtr<Material> computeMaterial;
+    uPtr<Material> computeMaterial = nullptr;
     uvec3 workGroupSize;
 
     bool isCreated = false;

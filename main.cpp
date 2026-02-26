@@ -17,6 +17,8 @@
 #include "scene/material.h"
 #include "scene/shader-parameter.h"
 
+#include "lighting/gi-manager.h"
+
 using namespace std;
 using namespace vk::raii;
 using namespace glm;
@@ -53,7 +55,9 @@ private:
     Queue presentQueue = nullptr;
     // Queue graphicsQueue = nullptr;
     vector<const char*> desiredDeviceExtensions = {
-        vk::KHRSwapchainExtensionName
+        vk::KHRSwapchainExtensionName,
+        vk::EXTShaderAtomicFloatExtensionName,
+        vk::KHRComputeShaderDerivativesExtensionName
     };
 
     SwapchainKHR swapChain = nullptr;
@@ -96,6 +100,8 @@ private:
     WTexture roughness;
     WTexture ao;
     WTexture testCubeMap;
+
+    uPtr<GIManager> giManager;
 
 #ifdef NDEBUG // Not Debug, Part of C++ Standard
     const bool enableValidationLayers = false;
@@ -245,12 +251,14 @@ private:
             });
 
         // Check features (corresponds to logical device features we add)
-        auto features = physicalDevice.template getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+        auto features = physicalDevice.template getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features, vk::PhysicalDeviceVulkan13Features, vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT, vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT, vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR>();
         isSuitable = isSuitable &&
             features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
             features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
             features.template get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
-            features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
+            features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
+            features.template get<vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT>().shaderBufferFloat32AtomicAdd &&
+            features.template get<vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR>().computeDerivativeGroupQuads;
 
         return isSuitable;
     }
@@ -314,13 +322,17 @@ private:
             vk::PhysicalDeviceFeatures2, // A
             vk::PhysicalDeviceVulkan11Features, // B
             vk::PhysicalDeviceVulkan13Features, // C 
-            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT // D
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT, // D
+            vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT,
+            vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR
         >
             featureChain = {
                 {.features = {.geometryShader = true, .samplerAnisotropy = true }}, // constructor for A,
                 {.shaderDrawParameters = true}, // B
                 {.synchronization2 = true, .dynamicRendering = true}, // constructor for C, dynamic rendering is a modern simplification
-                {.extendedDynamicState = true}
+                {.extendedDynamicState = true},
+                {.shaderBufferFloat32AtomicAdd = true},
+                {.computeDerivativeGroupQuads = true}
         };
 
         vk::DeviceCreateInfo deviceCreateInfo{
@@ -881,6 +893,12 @@ private:
 
     }
 
+    void testGI() {
+        giManager = mkU<GIManager>(&coreReferences);
+
+        giManager->Test(&testCubeMap);
+    }
+
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
@@ -900,6 +918,7 @@ private:
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{ .type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
 
         };
         shaderPipeline.Create(coreReferences, "shaders/slang.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams);
@@ -936,6 +955,7 @@ private:
 
         CreateDescriptorPool();
         
+        testGI();
 
         vector materialParams = {
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
@@ -945,11 +965,13 @@ private:
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &vertexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &indexBuffer}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap})
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &giManager->shCoefficients})
         };
         testMaterial.Create(&shaderPipeline, coreReferences, materialParams);
 
         testCompute();
+        
     }
 
     void UpdateUniformBuffer(uint32_t currFrame) {

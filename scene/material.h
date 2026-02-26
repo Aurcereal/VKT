@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defines.h"
-#include "pipeline.h"
+// #include "pipeline.h"
 
 #include "scene/buffer.h"
 #include "scene/texture.h"
@@ -18,8 +18,8 @@ public:
 private:
 	void CreateDescriptorSets(const VulkanReferences&, const vector<ShaderParameter::MParameter>& parameters);// WTexture&, WTexture&, WTexture&, WTexture&, array<WBuffer*, 2>& meshBuffers);
 
-	const WPipeline* pipeline;
-	int duplicationCount;
+	const WPipeline* pipeline = nullptr;
+	int duplicationCount = -1;
 };
 
 struct UniformBufferObject {

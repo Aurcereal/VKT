@@ -63,6 +63,23 @@ StructuredBuffer<uint32_t> indices;
 
 SamplerCube skybox;
 
+StructuredBuffer<float> shCoefficients;
+float3 sampleSh(float3 rd) {
+    // TODO: put in module andor generate into a cubemap so we dont have to do math after caching
+    float3 c1 = float3(shCoefficients[0], shCoefficients[1], shCoefficients[2]);
+    float3 c2 = float3(shCoefficients[3], shCoefficients[4], shCoefficients[5]);
+    float3 c3 = float3(shCoefficients[6], shCoefficients[7], shCoefficients[8]);
+    float3 c4 = float3(shCoefficients[9], shCoefficients[10], shCoefficients[11]);
+    float3 c5 = float3(shCoefficients[12], shCoefficients[13], shCoefficients[14]);
+    float3 c6 = float3(shCoefficients[15], shCoefficients[16], shCoefficients[17]);
+    float3 c7 = float3(shCoefficients[18], shCoefficients[19], shCoefficients[20]);
+    float3 c8 = float3(shCoefficients[21], shCoefficients[22], shCoefficients[23]);
+    float3 c9 = float3(shCoefficients[24], shCoefficients[25], shCoefficients[26]);
+
+    return float3(0.); // TODO: complete and remember we have to get the cosine term too
+    // convolution of f and g multiplied is equal to frequency version of f multiplied by frequency version of g (find frequency ver of cos online)
+}
+
 static float3 light_pos[4] = float3[](float3(-10, 10, 10),
                                       float3(10, 10, 10),
                                       float3(-10, -10, 10),

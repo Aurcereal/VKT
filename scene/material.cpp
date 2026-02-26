@@ -1,6 +1,7 @@
 #include "material.h"
 #include <iostream>
 #include <variant>
+#include "pipeline.h"
 
 using namespace std;
 
@@ -36,7 +37,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
         for (uint j = 0; j < parameters.size(); j++) {
             auto& param = parameters[j];
 
-            std::cout << "\t" << j << ":\t" << (int)param.type << std::endl;
+            // std::cout << "\t" << j << ":\t" << (int)param.type << std::endl;
 
             switch (param.type) {
             case ShaderParameter::Type::UNIFORM:
