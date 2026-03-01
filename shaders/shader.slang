@@ -65,18 +65,36 @@ SamplerCube skybox;
 
 StructuredBuffer<float> shCoefficients;
 float3 sampleSh(float3 rd) {
-    // TODO: put in module andor generate into a cubemap so we dont have to do math after caching
-    float3 c1 = float3(shCoefficients[0], shCoefficients[1], shCoefficients[2]);
-    float3 c2 = float3(shCoefficients[3], shCoefficients[4], shCoefficients[5]);
-    float3 c3 = float3(shCoefficients[6], shCoefficients[7], shCoefficients[8]);
-    float3 c4 = float3(shCoefficients[9], shCoefficients[10], shCoefficients[11]);
-    float3 c5 = float3(shCoefficients[12], shCoefficients[13], shCoefficients[14]);
-    float3 c6 = float3(shCoefficients[15], shCoefficients[16], shCoefficients[17]);
-    float3 c7 = float3(shCoefficients[18], shCoefficients[19], shCoefficients[20]);
-    float3 c8 = float3(shCoefficients[21], shCoefficients[22], shCoefficients[23]);
-    float3 c9 = float3(shCoefficients[24], shCoefficients[25], shCoefficients[26]);
 
-    return float3(0.); // TODO: complete and remember we have to get the cosine term too
+    float cosCo1 = PI;
+    float cosCo2 = (2. / 3.) * PI;
+    float cosCo3 = PI * .25;
+    float mult = 4. * PI / 1024.;
+    // TODO: put in module andor generate into a cubemap so we dont have to do math after caching
+    float3 c1 = mult * cosCo1 * float3(shCoefficients[0], shCoefficients[1], shCoefficients[2]);
+
+    float3 c2 = mult * cosCo2 * float3(shCoefficients[3], shCoefficients[4], shCoefficients[5]);
+    float3 c3 = mult * cosCo2 * float3(shCoefficients[6], shCoefficients[7], shCoefficients[8]);
+    float3 c4 = mult * cosCo2 * float3(shCoefficients[9], shCoefficients[10], shCoefficients[11]);
+
+    float3 c5 = mult * cosCo3 * float3(shCoefficients[12], shCoefficients[13], shCoefficients[14]);
+    float3 c6 = mult * cosCo3 * float3(shCoefficients[15], shCoefficients[16], shCoefficients[17]);
+    float3 c7 = mult * cosCo3 * float3(shCoefficients[18], shCoefficients[19], shCoefficients[20]);
+    float3 c8 = mult * cosCo3 * float3(shCoefficients[21], shCoefficients[22], shCoefficients[23]);
+    float3 c9 = mult * cosCo3 * float3(shCoefficients[24], shCoefficients[25], shCoefficients[26]);
+
+    return 
+        c1 * 0.28209479 +
+        c2 * 0.4886025119029199 * rd.y +
+        c3 * 0.4886025119029199 * rd.z +
+        c4 * 0.4886025119029199 * rd.x +
+        c5 * 1.0925484305920792 * rd.x * rd.y +
+        c6 * 1.0925484305920792 * rd.y * rd.z +
+        c7 * 0.31539156525252005 * (3 * rd.z * rd.z - 1) +
+        c8 * 1.0925484305920792 * rd.x * rd.z +
+        c9 * 0.5462742152960396 * (rd.x * rd.x - rd.y * rd.y);
+
+    // TODO: complete and remember we have to get the cosine term too
     // convolution of f and g multiplied is equal to frequency version of f multiplied by frequency version of g (find frequency ver of cos online)
 }
 
@@ -136,7 +154,7 @@ float4 fragMain(FSInput o) : SV_Target
 
     float3 sta = o.worldPos + norm * 0.01;
     float3 reflRay = normalize(reflect(o.worldPos - camPos, norm));
-    float3 skyCol = skybox.Sample(reflRay).rgb;
+    float3 skyCol = sampleSh(reflRay);//skybox.Sample(reflRay).rgb;
     float minDist = 10000.;
     float2 uv = o.uv;
     for (uint32_t i = 0; i < 7440; i += 3) {
@@ -201,8 +219,8 @@ float4 fragMain(FSInput o) : SV_Target
         float3 kd = float3(1.0) - ks;
         kd *= 1.0 - metallic; // More metal less diffuse
 
-        float3 fComposite = kd * fLambert + fCookTorrance;
-        Lo += fComposite * Li * lambert;
+        Lo += fCookTorrance * Li * lambert; // Specular
+        Lo += kd * fLambert * Li * lambert; // Diffuse
     }
 
     float3 col = gammaCorrect(reinhardOp(Lo));
