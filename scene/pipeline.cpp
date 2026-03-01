@@ -6,6 +6,8 @@
 #include "scene/material.h"
 #include "scene/shader-parameter.h"
 
+#include <iostream>
+
 using namespace std;
 
 // [[nodiscard]] will make program throw error is programmer calls func without using return value
@@ -269,5 +271,6 @@ void ComputePipeline::EnqueueDispatch(ComputeDispatcher* dispatcher, uvec3 total
     dispatcher->cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *pipelineLayout, 0, *(computeMaterial->descriptorSets[0]), nullptr);
 
     uvec3 workGroupCount = ceil(vec3(totalThreadCount) / vec3(workGroupSize));
+    std::cout << "wx: " << workGroupCount.x << " wy: " << workGroupCount.y << " wz: " << workGroupCount.z << std::endl;
     dispatcher->cmd.dispatch(workGroupCount.x, workGroupCount.y, workGroupCount.z);
 }

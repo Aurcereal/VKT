@@ -886,10 +886,12 @@ private:
         receiveBuffer.Create(coreReferences, byteSize, vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
         receiveBuffer.CopyFrom(coreReferences, outBuffer, byteSize);
 
-        int* data = (int*) receiveBuffer.MapMemory();
+        /*int* data = (int*) receiveBuffer.MapMemory();
         for (int i = 0; i < size; i++) {
             std::cout << data[i] << std::endl;
-        }
+        }*/
+
+        // receiveBuffer.UnmapMemory();
 
     }
 
@@ -928,7 +930,7 @@ private:
 
         CreateSyncObjects();
 
-        LoadModel("models/morrisChair.obj");// two - case-MONEY_triang - LP.obj");// MODEL_PATH);
+        LoadModel("models/blob.obj");// two - case-MONEY_triang - LP.obj");// MODEL_PATH);
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
@@ -946,6 +948,12 @@ private:
             "textures/envmaps/storforsen/negy.jpg",
             "textures/envmaps/storforsen/posz.jpg",
             "textures/envmaps/storforsen/negz.jpg"
+            /*"textures/envmaps/stormydays/stormydays_rt.tga",
+            "textures/envmaps/stormydays/stormydays_lf.tga",
+            "textures/envmaps/stormydays/stormydays_up.tga",
+            "textures/envmaps/stormydays/stormydays_dn.tga",
+            "textures/envmaps/stormydays/stormydays_ft.tga",
+            "textures/envmaps/stormydays/stormydays_bk.tga"*/
             }, vk::Format::eR8G8B8A8Srgb);
 
         /*CreateTextureImage(testTexture, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png");
@@ -985,9 +993,9 @@ private:
             .view = glm::lookAt(vec3(0,2,5), vec3(0), vec3(0,1,0)),
             .proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 1000.0f), // TODO: increase far
         };
-       /* ubo.model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);*/
+        ubo.model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f)*0.0f, glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = lookAt(glm::vec3(3.0f * cos(time), 3.0f*sin(time), 3.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
         // glm::perspective outputs flipped y clip space, compensate
         ubo.proj[1][1] *= -1.0f;
 

@@ -24,6 +24,24 @@ float2 hash12(uint x) {
     return float2(hash11(x), hash11(x * 14 + 52));
 }
 
+float2 hash22(float2 p)
+{
+    float3 p3 = fract(float3(p.xyx) * float3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+// from ShaderToy https://www.shadertoy.com/view/4tXyWN
+float rng(uint2 seed) {
+    uint2 q = 1103515245U * ((seed >> 1U) ^ (seed.yx));
+    uint n = 1103515245U * ((q.x) ^ (q.y >> 3U));
+    return float(n) * (1.0 / float(0xffffffffU));
+}
+
+float rngi(int i) {
+    return fract(8592.682 * sin(float(i) * 0.0325 * 32.301));
+}
+
 float3 uniformSphere(float2 xi) {
     float theta = xi.x * 2. * PI;
 
@@ -40,21 +58,27 @@ float3 uniformSphere(float2 xi) {
 // cuz like i wanna vary ro but keep pipeline same
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void main(uint3 id: SV_DispatchThreadID, uint threadIDWithinGroup : SV_GroupThreadID) { // GroupTHreadID is id within group flattened to 1D
-    float3 rd = uniformSphere(hash12(id.x+id.y*1024)); // 1024 temp make it the baked size
+void main(uint3 id: SV_DispatchThreadID, uint3 threadIDWithinGroup3: SV_GroupThreadID) { // GroupTHreadID is id within group flattened to 1D
+    // float3(0., float((id.x + id.y) % 2) * 2. - 1., 0.);                    // uniformSphere(hash12(id.x + id.y * 1024 + 4204));                              // 1024 temp make it the baked size
+    // rd = float3(0., step(rng(id.xy), 0.5) * 2. - 1., 0.);
+    float3 rd = uniformSphere(float2(rngi(id.x - id.y+525), rngi(id.x + id.y+525)));
+    // float3 rd = float3(0., step(rngi(id.x + id.y * 128), 0.5) * 2. - 1., 0.);
+    // rd.y = float((id.x + id.y) % 2) * 2. - 1.;
+    // if (id.x <= 0 && (id.y == 1 || id.y == 3)) rd.y = 1.;
     float3 li = SampleSkybox(rd, skybox);
 
     // All of these basis functions are normalized so no need to divide by their function dot product
+    uint threadIDWithinGroup = threadIDWithinGroup3.y * 8 + threadIDWithinGroup3.x;
     sharedCoefficients[threadIDWithinGroup][0] = 0.28209479 * li;
 
-    sharedCoefficients[threadIDWithinGroup][1] = 0.4886025119029199 * rd.y * li;
+    sharedCoefficients[threadIDWithinGroup][1] = -0.4886025119029199 * rd.y * li;
     sharedCoefficients[threadIDWithinGroup][2] = 0.4886025119029199 * rd.z * li;
-    sharedCoefficients[threadIDWithinGroup][3] = 0.4886025119029199 * rd.x * li;
+    sharedCoefficients[threadIDWithinGroup][3] = -0.4886025119029199 * rd.x * li;
 
     sharedCoefficients[threadIDWithinGroup][4] = 1.0925484305920792 * rd.x * rd.y * li;
-    sharedCoefficients[threadIDWithinGroup][5] = 1.0925484305920792 * rd.y * rd.z * li;
-    sharedCoefficients[threadIDWithinGroup][6] = 0.31539156525252005 * (3 * rd.z * rd.z - 1) * li;
-    sharedCoefficients[threadIDWithinGroup][7] = 1.0925484305920792 * rd.x * rd.z * li;
+    sharedCoefficients[threadIDWithinGroup][5] = -1.0925484305920792 * rd.y * rd.z * li;
+    sharedCoefficients[threadIDWithinGroup][6] = 0.31539156525252005 * (3. * rd.z * rd.z - 1.) * li;
+    sharedCoefficients[threadIDWithinGroup][7] = -1.0925484305920792 * rd.x * rd.z * li;
     sharedCoefficients[threadIDWithinGroup][8] = 0.5462742152960396 * (rd.x * rd.x - rd.y * rd.y) * li;
 
     // Wait til all threads in group are done
@@ -69,7 +93,11 @@ void main(uint3 id: SV_DispatchThreadID, uint threadIDWithinGroup : SV_GroupThre
             }
             InterlockedAdd(shCoefficients[basis*3 + 0], sum.x);
             InterlockedAdd(shCoefficients[basis*3 + 1], sum.y);
-            InterlockedAdd(shCoefficients[basis*3 + 2], sum.z);
+            InterlockedAdd(shCoefficients[basis * 3 + 2], sum.z);
         }
     }
+
+    // if (threadIDWithinGroup == 0) {
+    //     InterlockedAdd(shCoefficients[25], 1.0);
+    // }
 }

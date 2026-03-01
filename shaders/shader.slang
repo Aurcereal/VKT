@@ -1,3 +1,5 @@
+import Raytracing;
+
 struct UniformBuffer {
     float off;
     float4x4 model;
@@ -69,7 +71,7 @@ float3 sampleSh(float3 rd) {
     float cosCo1 = PI;
     float cosCo2 = (2. / 3.) * PI;
     float cosCo3 = PI * .25;
-    float mult = 4. * PI / 1024.;
+    float mult = 4. * PI / (128.*128.);
     // TODO: put in module andor generate into a cubemap so we dont have to do math after caching
     float3 c1 = mult * cosCo1 * float3(shCoefficients[0], shCoefficients[1], shCoefficients[2]);
 
@@ -85,13 +87,13 @@ float3 sampleSh(float3 rd) {
 
     return 
         c1 * 0.28209479 +
-        c2 * 0.4886025119029199 * rd.y +
+        (-1.) * c2 * 0.4886025119029199 * rd.y +
         c3 * 0.4886025119029199 * rd.z +
-        c4 * 0.4886025119029199 * rd.x +
+        (-1.) * c4 * 0.4886025119029199 * rd.x +
         c5 * 1.0925484305920792 * rd.x * rd.y +
-        c6 * 1.0925484305920792 * rd.y * rd.z +
+        (-1.) * c6 * 1.0925484305920792 * rd.y * rd.z +
         c7 * 0.31539156525252005 * (3 * rd.z * rd.z - 1) +
-        c8 * 1.0925484305920792 * rd.x * rd.z +
+        (-1.) * c8 * 1.0925484305920792 * rd.x * rd.z +
         c9 * 0.5462742152960396 * (rd.x * rd.x - rd.y * rd.y);
 
     // TODO: complete and remember we have to get the cosine term too
@@ -145,6 +147,39 @@ float3 textureGammaCorrect(float3 texColor) {
     return pow(texColor, float3(2.2));
 }
 
+float2 hash22(float2 p)
+{
+    float3 p3 = fract(p.xyx * float3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+// from ShaderToy https://www.shadertoy.com/view/4tXyWN
+float rng(uint2 seed) {
+    uint2 q = 1103515245U * ((seed >> 1U) ^ (seed.yx));
+    uint n = 1103515245U * ((q.x) ^ (q.y >> 3U));
+    return float(n) * (1.0 / float(0xffffffffU));
+}
+
+float rngf(float f) {
+    return fract(8592.682 * sin(f * 32.301));
+}
+
+float rngi(int i) {
+    return fract(8592.682 * sin(float(i)*0.0325 * 32.301));
+}
+
+float3 uniformSphere(float2 xi) {
+    float theta = xi.x * 2. * PI;
+
+    float y = xi.y * 2. - 1.;
+    float r = 1. - y * y;
+
+    float3 v = float3(r * float2(cos(theta), sin(theta)), y).xzy;
+
+    return normalize(v); // Should already be normalized but just in case
+}
+
 [shader("fragment")]
 float4 fragMain(FSInput o) : SV_Target
 {
@@ -154,7 +189,7 @@ float4 fragMain(FSInput o) : SV_Target
 
     float3 sta = o.worldPos + norm * 0.01;
     float3 reflRay = normalize(reflect(o.worldPos - camPos, norm));
-    float3 skyCol = sampleSh(reflRay);//skybox.Sample(reflRay).rgb;
+    float3 skyCol = skybox.Sample(reflRay).rgb;
     float minDist = 10000.;
     float2 uv = o.uv;
     for (uint32_t i = 0; i < 7440; i += 3) {
@@ -183,8 +218,8 @@ float4 fragMain(FSInput o) : SV_Target
         }
     }
 
-    const float3 albedo = textureGammaCorrect(texSampler.Sample(uv).rgb); // float3(1.0,0.,0.);
-    const float metallic = metallicSampler.Sample(uv).r;                  // 1.0; // 0.5
+    const float3 albedo = 0.8;//textureGammaCorrect(texSampler.Sample(uv).rgb); // float3(1.0,0.,0.);
+    const float metallic = metallicSampler.Sample(uv).r; // 1.0; // 0.5
     const float roughness = roughnessSampler.Sample(uv).r;                // 0.1;
     const float ambientOcclusion = 0.;//aoSampler.Sample(o.uv).r;//0.;
 
@@ -219,12 +254,24 @@ float4 fragMain(FSInput o) : SV_Target
         float3 kd = float3(1.0) - ks;
         kd *= 1.0 - metallic; // More metal less diffuse
 
-        Lo += fCookTorrance * Li * lambert; // Specular
-        Lo += kd * fLambert * Li * lambert; // Diffuse
+        // Lo += fCookTorrance * Li * lambert; // Specular
+        // Lo += kd * fLambert * Li * lambert; // Diffuse
     }
+    Lo += albedo * INVPI * sampleSh(norm);
 
     float3 col = gammaCorrect(reinhardOp(Lo));
 
-    return float4(skyCol, 1.);
+    // float3 val = 0.;
+    // for (uint i = 0; i < 5000; i++) {
+    //     // val += uniformSphere(float2(
+    //     //     rngf(o.worldPos.x+float(i)),//rng(uint2(abs(o.worldPos.xy*10.)) + i),
+    //     //     rngf(o.worldPos.y-float(i))//rng(uint2(abs(o.worldPos.yx*10.)) + i+4)
+    //     // ));
+    //     val += step(rngi(int(o.worldPos.x * 246.) + i),0.5)*2.-1.;
+    // }
+    // val /= 5000.;
+    // float v = shCoefficients[26]-64.*8.;
+
+    return float4(col, 1.);
 
 }

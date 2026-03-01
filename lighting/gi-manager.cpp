@@ -5,12 +5,19 @@
 
 #include "scene/material.h"
 
+#include <iostream>
+
 void GIManager::Test(WTexture* skybox) {
 	GenerateSHCoefficients(skybox);
 }
 
 void GIManager::GenerateSHCoefficients(WTexture* skybox) {
-	shCoefficients.Create(*ref, sizeof(float) * 3 * 9, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	vk::DeviceSize byteSize = sizeof(float) * 3 * 9;
+	array<float, 27> zeroData;
+	for (int i = 0; i < 27; i++) {
+		zeroData[i] = 0.0f;
+	}
+	shCoefficients.CreateDeviceLocalFromData(*ref, byteSize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc, zeroData.data());
 
 	vector sParams = {
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute},
@@ -29,6 +36,16 @@ void GIManager::GenerateSHCoefficients(WTexture* skybox) {
 	dispatcher.Create(*ref);
 
 	dispatcher.StartRecord(*ref);
-	generateShader.EnqueueDispatch(&dispatcher, uvec3(32, 32, 1));
+	generateShader.EnqueueDispatch(&dispatcher, uvec3(128, 128, 1));
 	dispatcher.FinishRecordSubmit(*ref);
+
+	WBuffer receiveBuffer;
+	receiveBuffer.Create(*ref, byteSize, vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+	receiveBuffer.CopyFrom(*ref, shCoefficients, byteSize);
+
+	float* data = (float*)receiveBuffer.MapMemory();
+	for (int i = 0; i < 27; i++) {
+		std::cout << data[i] << std::endl;
+	}
+	receiveBuffer.UnmapMemory();
 }
