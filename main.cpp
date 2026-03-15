@@ -903,7 +903,7 @@ private:
         CreateDescriptorPool();
 
         testGI();
-        writeToCubemap();
+        //writeToCubemap();
 
         vector materialParams = {
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
@@ -913,7 +913,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &chairMesh.vertexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &chairMesh.indexBuffer}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &writtenToCubemap}),// &testCubeMap }),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),// &writtenCubemap }),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &giManager->shCoefficients})
         };
         testMaterial.Create(&shaderPipeline, coreReferences, materialParams);
