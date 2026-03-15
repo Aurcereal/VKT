@@ -10,7 +10,7 @@ vector<char> readFile(const std::string& fileName) {
     );
 
     if (!file.is_open()) {
-        throw std::runtime_error("Couldn't open file");
+        throw std::runtime_error("Couldn't open file " + fileName);
     }
 
     vector<char> buffer(file.tellg()); // cursor pos is size

@@ -94,9 +94,9 @@ void WRenderPass::EnqueueDraw(const Mesh& mesh) {
 }
 
 // TODO: also a transition for depth maybe?
-void WRenderPass::FinishExecute(vk::ImageLayout targetColorLayout, bool waitForFinish) {
+void WRenderPass::FinishExecute(vk::ImageLayout postTargetColorLayout, bool waitForFinish) {
     currCmd->endRendering();
-    target->colorTex->TransitionImageLayoutHardcodedEnqueue(currCmd, *ref, vk::ImageLayout::eColorAttachmentOptimal, targetColorLayout);
+    target->colorTex->TransitionImageLayoutHardcodedEnqueue(currCmd, *ref, vk::ImageLayout::eColorAttachmentOptimal, postTargetColorLayout);
     currCmd->end();
 
     vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);

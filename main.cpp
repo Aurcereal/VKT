@@ -58,7 +58,7 @@ private:
     // Queue graphicsQueue = nullptr;
     vector<const char*> desiredDeviceExtensions = {
         vk::KHRSwapchainExtensionName,
-        vk::EXTShaderAtomicFloatExtensionName, // ATOMIC
+        // vk::EXTShaderAtomicFloatExtensionName, // ATOMIC
         vk::KHRComputeShaderDerivativesExtensionName
     };
 
@@ -71,6 +71,9 @@ private:
     vector<vk::raii::ImageView> swapChainImageViews;
 
     ShaderPipeline shaderPipeline;
+
+    ShaderPipeline skyboxShader;
+    Material skyboxMaterial;
 
     vector<vk::raii::CommandBuffer> commandBuffers;
 
@@ -95,6 +98,7 @@ private:
 
     Mesh blobMesh;
     Mesh chairMesh;
+    Mesh cubeMesh;
 
     vector<WBuffer> uniformBuffers; // Memory for each frame in flight so each frame can have diff uniform vals
 
@@ -263,7 +267,7 @@ private:
             features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
             features.template get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
             features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
-            features.template get<vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT>().shaderBufferFloat32AtomicAdd && // ATOMIC 
+            // features.template get<vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT>().shaderBufferFloat32AtomicAdd && // ATOMIC 
             features.template get<vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR>().computeDerivativeGroupQuads;
 
         return isSuitable;
@@ -329,7 +333,7 @@ private:
             vk::PhysicalDeviceVulkan11Features, // B
             vk::PhysicalDeviceVulkan13Features, // C 
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT, // D
-            vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT, // ATOMIC 
+            // vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT, // ATOMIC 
             vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR
         >
             featureChain = {
@@ -337,7 +341,7 @@ private:
                 {.shaderDrawParameters = true}, // B
                 {.synchronization2 = true, .dynamicRendering = true}, // constructor for C, dynamic rendering is a modern simplification
                 {.extendedDynamicState = true},
-                {.shaderBufferFloat32AtomicAdd = true}, // ATOMIC 
+                // {.shaderBufferFloat32AtomicAdd = true}, // ATOMIC 
                 {.computeDerivativeGroupQuads = true}
         };
 
@@ -560,16 +564,25 @@ private:
         // For getting prim index
         commandBuffer.setPrimitiveRestartEnable(true);
 
-        // Bind GraphGraphics Pipeline and Geo Data
-        shaderPipeline.Bind(commandBuffer);
-        commandBuffer.bindVertexBuffers(0, *(chairMesh.vertexBuffer.buffer), { 0 }); // Bind buffer to our binding which has layout and stride stuff {0} is array of vertex buffers to bind
-        commandBuffer.bindIndexBuffer(*(chairMesh.indexBuffer.buffer), 0, vk::IndexType::eUint32);
-
         // remember in the pipeline we specified viewport and scissor state as dynamic, so we gotta specify them now
         commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
         commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
 
+        // Skybox
+        skyboxShader.Bind(commandBuffer);
+        skyboxShader.BindDescriptorSets(commandBuffer, skyboxMaterial.descriptorSets[frameIndex]);
+        commandBuffer.bindVertexBuffers(0, *(cubeMesh.vertexBuffer.buffer), { 0 });
+        commandBuffer.bindIndexBuffer(*cubeMesh.indexBuffer.buffer, 0, vk::IndexType::eUint32);
+        commandBuffer.drawIndexed(cubeMesh.indexCount, 1, 0, 0, 0);
+
+        // Bind Pipeline & Material
+        shaderPipeline.Bind(commandBuffer);
         shaderPipeline.BindDescriptorSets(commandBuffer, testMaterial.descriptorSets[frameIndex]);
+        
+        // Bind Mesh
+        commandBuffer.bindVertexBuffers(0, *(chairMesh.vertexBuffer.buffer), { 0 }); // Bind buffer to our binding which has layout and stride stuff {0} is array of vertex buffers to bind
+        commandBuffer.bindIndexBuffer(*(chairMesh.indexBuffer.buffer), 0, vk::IndexType::eUint32);
+
         // IndexCount, InstanceCount, IndexBufferOffset, VertexBufferOffset, InstanceOffset
         commandBuffer.drawIndexed(chairMesh.indexCount, 1, 0, 0, 0);
 
@@ -753,7 +766,7 @@ private:
         };
 
         ComputePipeline computeShader;
-        computeShader.Create(coreReferences, "shaders/slang2.spv", shaderParams, materialParams, uvec3(256, 1, 1));
+        computeShader.Create(coreReferences, "shaders/test-compute.spv", shaderParams, materialParams, uvec3(256, 1, 1));
 
         ComputeDispatcher dispatcher;
         dispatcher.Create(coreReferences);
@@ -863,7 +876,7 @@ private:
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
 
         };
-        shaderPipeline.Create(coreReferences, "shaders/slang.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams);
+        shaderPipeline.Create(coreReferences, "shaders/pbr-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams);
 
         CreateCommandPool();
         CreateCommandBuffers();
@@ -872,6 +885,7 @@ private:
 
         blobMesh.CreateFromFile(coreReferences, "models/blob.obj", true);
         chairMesh.CreateFromFile(coreReferences, "models/morrisChair.obj", true);
+        cubeMesh.CreateFromFile(coreReferences, "models/cube.obj");
         CreateUniformBuffers();
 
         CreateDepthResources();
@@ -902,7 +916,7 @@ private:
 
         CreateDescriptorPool();
 
-        testGI();
+        // testGI();
         //writeToCubemap();
 
         vector materialParams = {
@@ -914,11 +928,22 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &chairMesh.vertexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &chairMesh.indexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),// &writtenCubemap }),
-            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &giManager->shCoefficients})
+            // ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &giManager->shCoefficients}) ATOMIC
         };
         testMaterial.Create(&shaderPipeline, coreReferences, materialParams);
 
-        testCompute();
+        // testCompute();
+
+        vector skyboxShaderParams = {
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+        };
+        vector skyboxMaterialParams = {
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),
+        };
+        skyboxShader.Create(coreReferences, "shaders/skybox.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams, false, true);
+        skyboxMaterial.Create(&skyboxShader, coreReferences, skyboxMaterialParams);
 
     }
 
@@ -929,8 +954,8 @@ private:
 
         UniformBufferObject ubo = {
             .off = time,
-            .model = glm::scale(mat4(1.0f), vec3(0.014f)) * glm::rotate(mat4(1.0f), time, vec3(0.0f, 1.0f, 0.0f)),
-            .view = glm::lookAt(vec3(0,2,5), vec3(0), vec3(0,1,0)),
+            .model = glm::scale(mat4(1.0f), vec3(0.014f)) * glm::rotate(mat4(1.0f), 0*time, vec3(0.0f, 1.0f, 0.0f)),
+            .view = glm::lookAt(mat3(glm::rotate(mat4(1.0f), time, vec3(0,1,0))) * vec3(0,2,5), vec3(0), vec3(0,1,0)),
             .proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 1000.0f), // TODO: increase far
         };
         /*ubo.model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f) * 0.0f, glm::vec3(0.0f, 0.0f, 1.0f));

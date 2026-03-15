@@ -24,7 +24,7 @@ using namespace std;
     return shaderModule;
 }
 
-void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, const vk::Format* colorFormats, const vk::Format& depthFormat, const vector<ShaderParameter::SParameter>& parameters) {
+void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, const vk::Format* colorFormats, const vk::Format& depthFormat, const vector<ShaderParameter::SParameter>& parameters, bool depthEnabled, bool flipFaces) {
     // Create our shader uniforms/descriptor set layouts
     CreateDescriptorSetLayout(ref, parameters);
 
@@ -32,7 +32,7 @@ void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, con
     // Then fixed-function parameter setup for blending mode, viewport, rasterization
 
     // PROGRAMMABLE
-    auto shaderModule = CreateShaderModule(ref, "shaders/slang.spv");
+    auto shaderModule = CreateShaderModule(ref, path);
 
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
         .stage = vk::ShaderStageFlagBits::eVertex,
@@ -100,7 +100,7 @@ void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, con
         .depthClampEnable = vk::False, // frags beyond near far plane are clamped to them instead of discarded, using this requres enabling a gpu feature
         .rasterizerDiscardEnable = vk::False, // disables output to framebuffer
         .polygonMode = vk::PolygonMode::eFill, // could be used for lines or points (requires gpu feature for non fill)
-        .cullMode = vk::CullModeFlagBits::eBack,
+        .cullMode = flipFaces ? vk::CullModeFlagBits::eFront : vk::CullModeFlagBits::eBack,
         .frontFace = vk::FrontFace::eCounterClockwise,
         .depthBiasEnable = vk::False, // could alter depth vals based on const or frags slope or wtver
         .depthBiasSlopeFactor = 1.0f,
@@ -155,9 +155,9 @@ void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, con
 
     // Depth & stencil state
     vk::PipelineDepthStencilStateCreateInfo depthStencil = {
-        .depthTestEnable = vk::True,
-        .depthWriteEnable = vk::True, // should new frags write to depth buff
-        .depthCompareOp = vk::CompareOp::eLess, // 1 is far plane 0 is near
+        .depthTestEnable = depthEnabled,
+        .depthWriteEnable = depthEnabled, // should new frags write to depth buff
+        .depthCompareOp = depthEnabled ? vk::CompareOp::eLess : vk::CompareOp::eNever, // 1 is far plane 0 is near
         .depthBoundsTestEnable = vk::False, // only keep fragments within specified depth range
         .stencilTestEnable = vk::False // you'd need stencil component in depth/stencil image format
     };
@@ -219,7 +219,7 @@ void ShaderPipeline::Bind(const vk::raii::CommandBuffer& cmd) const {
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
 }
 void ShaderPipeline::BindDescriptorSets(const vk::raii::CommandBuffer& cmd, const vk::raii::DescriptorSet& descriptorSet) const {
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSet, nullptr);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSet, nullptr); // change nullptr to offsets
 }
 
 void ComputePipeline::Create(const VulkanReferences& ref, const string& path, const vector<ShaderParameter::SParameter>& parameters, const vector<ShaderParameter::MParameter>& parameterData, uvec3 workGroupSize) {
