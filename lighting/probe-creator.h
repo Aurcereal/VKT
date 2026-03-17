@@ -8,6 +8,11 @@
 
 using namespace glm;
 
+struct Probe {
+	WBuffer shCoefficients;
+	// TODO: octahedral depth map here
+}; // TODO: use
+
 class ProbeCreator {
 public:
 	void Create(const VulkanReferences*, WTexture* skybox, vector<WBuffer>* uniformBuffers, WTexture* testCubeMap, Mesh* testRoom, WTexture* testRoomTexture, WTexture* metallic, WTexture* roughness, WTexture* ao);

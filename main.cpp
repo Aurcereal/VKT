@@ -939,6 +939,7 @@ private:
         };
         shaderPipeline.Create(coreReferences, "shaders/pbr-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams);
         // testGI();
+        UpdateUniformBuffer(0);
         pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao);
         skySh = pc.BakeAndSetSkyboxProbe();
         envSh = std::move(pc.BakeEnvironmentProbe(vec3(0.0f)));
@@ -975,7 +976,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &metallic}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &roughness}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
-            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = envSh.get()})
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = envSh.get() })
         };
         reflectShader.Create(coreReferences, "shaders/reflect.spv", &swapSurfaceFormat.format, GetDepthFormat(), reflectShaderParams);
         reflectMaterial.Create(&reflectShader, coreReferences, reflectMaterialParams);

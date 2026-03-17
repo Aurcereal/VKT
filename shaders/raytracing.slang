@@ -21,7 +21,8 @@ public float3 SampleEnvironment(float3 ro, float3 rd,
         Sampler2D worldMetal,
         Sampler2D worldRoughness,
         Sampler2D worldAO,
-        StructuredBuffer<float> skyboxSh
+        StructuredBuffer<float> skyboxSh,
+        SamplerCube skybox
     ) {
     float minDist = 10000.;
     float2 hitUv;
@@ -63,6 +64,6 @@ public float3 SampleEnvironment(float3 ro, float3 rd,
         float ao = 0.;         // worldAO.Sample(hitUv).r;
         return SamplePBR(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, skyboxSh);
     } else {
-        return float3(1.,0.,0.); // SampleSkybox(rd, skybox);
+        return SampleSkybox(rd, skybox);
     }
 }

@@ -85,5 +85,10 @@ public float3 SamplePBR(float3 wo, float3 worldPos, float3 norm, float3 albedo, 
         Lo += kd * fLambert * Li * lambert; // Diffuse
     }
 
+    if(norm.y >= 0.99) {
+        // TODO: temp debug del
+        albedo.r *= 4.;
+    }
+
     return SampleSh(norm, skyboxSh, 0) * INVPI * albedo;
 }
