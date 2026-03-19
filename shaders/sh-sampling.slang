@@ -53,6 +53,7 @@ public float3 SampleInterpolatedSh(float3 rd, float3 pos, StructuredBuffer<float
     lp *= probeLayout.probeCounts-1;
 
     float3 fac = fract(lp);
+    fac = smoothstep(float3(0.0), float3(1.0), fac);
     uint3 id = uint3(lp);
     uint2 d = uint2(1, 0);
 
