@@ -20,6 +20,8 @@
 #include "scene/render-target.h"
 #include "lighting/probe-creator.h"
 
+#include "game/gui-manager.h"
+
 #include "lighting/gi-manager.h"
 
 using namespace std;
@@ -593,6 +595,8 @@ private:
         commandBuffer.bindIndexBuffer(*(blobMesh.indexBuffer.buffer), 0, vk::IndexType::eUint32);
         commandBuffer.drawIndexed(blobMesh.indexCount, 1, 0, 0, 0);*/
 
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *commandBuffer);
+
         commandBuffer.endRendering();
         // END RENDER
 
@@ -883,6 +887,14 @@ private:
         CreateDepthResources();
         CreateDescriptorPool();
 
+        GUIManager::Initialize(
+            window, *instance, 
+            *coreReferences.physicalDevice, *coreReferences.device, 
+            graphicsAndComputeIndex, *coreReferences.graphicsQueue, 
+            *coreReferences.descriptorPool, MAX_FRAMES_IN_FLIGHT,
+            static_cast<VkFormat>(swapSurfaceFormat.format), static_cast<VkFormat>(GetDepthFormat())
+        );
+
         // Other stuff
         blobMesh.CreateFromFile(coreReferences, "models/blob.obj", true);
         chairMesh.CreateFromFile(coreReferences, "models/morrisChair.obj", true);
@@ -943,7 +955,7 @@ private:
         UpdateUniformBuffer(0);
         pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao);
         skySh = pc.BakeAndSetSkyboxProbe();
-        envSh = std::move(pc.BakeEnvironmentProbes(uvec3(40, 10, 40), vec3(0), vec3(15.5,9,15.5)));
+        envSh = std::move(pc.BakeEnvironmentProbes(uvec3(4, 10, 4), vec3(0), vec3(15.5,9,15.5)));
         //writeToCubemap();
         vector materialParams = {
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
@@ -1099,6 +1111,7 @@ private:
     void MainLoop() {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents(); // Check for User Input Events
+            GUIManager::MainLoop();
             DrawFrame();
         }
 
@@ -1107,6 +1120,8 @@ private:
     }
 
     void Cleanup() {
+        GUIManager::Shutdown(coreReferences);
+
         CleanupSwapChain();
 
         // GLFW
