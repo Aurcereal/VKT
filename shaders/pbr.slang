@@ -85,7 +85,7 @@ float3 SamplePBR(float3 wo, float3 worldPos, float3 norm, float3 albedo, float m
         Lo += kd * fLambert * Li * lambert; // Diffuse
     }
 
-    if (norm.y >= 0.99) {
+    if (norm.y >= 0.99 && worldPos.y < -3.0) {
         // TODO: temp debug del
         albedo.r *= 4.;
     }

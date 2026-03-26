@@ -12,7 +12,9 @@ void WTexture::Create(const VulkanReferences& ref,
     vk::MemoryPropertyFlags properties, 
     vk::ImageAspectFlags imageViewAspectFlags, uint32_t arrayLayerCount, bool cubeMap) {
 
-    assert(!isCreated);
+    if (isCreated) {
+        std::cerr << "Texture " << this << " was already created but is being recreated." << std::endl;
+    }// assert(!isCreated);
     isCreated = true;
 
     this->width = width;

@@ -21,6 +21,10 @@
 #include "lighting/probe-creator.h"
 
 #include "game/gui-manager.h"
+#include "game/camera.h"
+#include "game/input-manager.h"
+#include "game/test-game.h"
+#include "helper/math.h"
 
 #include "lighting/gi-manager.h"
 
@@ -101,9 +105,13 @@ private:
     Mesh testRoom;
 
     vector<WBuffer> uniformBuffers; // Memory for each frame in flight so each frame can have diff uniform vals
+    vector<WBuffer> uEntityBuffers;
 
     Material testMaterial;
     Material afterMaterial;
+    Material blobMaterial;
+
+    WTexture whiteTexture;
 
     WTexture testTexture;
     WTexture metallic;
@@ -114,6 +122,8 @@ private:
     WTexture testRoomTexture;
 
     uPtr<GIManager> giManager;
+
+    TestGame game;
 
 #ifdef NDEBUG // Not Debug, Part of C++ Standard
     const bool enableValidationLayers = false;
@@ -134,6 +144,24 @@ private:
         window = glfwCreateWindow(WIDTH, HEIGHT, "VulkanTESTT", nullptr, nullptr); // 4th param is Monitor
         glfwSetWindowUserPointer(window, this); // Give window a pointer to app
         glfwSetFramebufferSizeCallback(window, FrameBufferResizeCallback);
+
+        // Setup GLFW Input Callbacks
+        glfwSetWindowUserPointer(window, this);
+        // frame buffer size callback here
+        glfwSetCursorPosCallback(window, [](GLFWwindow* window, double xpos, double ypos) {
+            auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+            vec2 pos = vec2(xpos, ypos) / vec2(WIDTH, HEIGHT);
+            pos.y = 1.0f - pos.y;
+            if (app) app->inputManager.OnMouseMove(pos);
+            });
+        glfwSetMouseButtonCallback(window, [](GLFWwindow* window, int button, int action, int /*mods*/) {
+            auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+            if (app) app->inputManager.OnMouseClick(button == 0, action == 1);
+            });
+        glfwSetScrollCallback(window, [](GLFWwindow* window, double /*xoffset*/, double yoffset) {
+            auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+            if (app) app->inputManager.OnMouseScroll(static_cast<float>(yoffset));
+            });
     }
 
     static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*) {
@@ -314,6 +342,7 @@ private:
             throw std::runtime_error("Couldn't find suitable GPU!");
         }
         coreReferences.physicalDevice = *devIter;
+        coreReferences.minUniformBufferOffsetAlignment = coreReferences.physicalDevice.getProperties().limits.minUniformBufferOffsetAlignment;
         physicalDeviceProperties = coreReferences.physicalDevice.getProperties();
         std::cout << "Max Compute Work Group Size: " << physicalDeviceProperties.limits.maxComputeWorkGroupSize[0] << std::endl;
     }
@@ -572,14 +601,14 @@ private:
 
         // Skybox
         skyboxShader.Bind(commandBuffer);
-        skyboxShader.BindDescriptorSets(commandBuffer, skyboxMaterial.descriptorSets[frameIndex]);
+        skyboxShader.BindMaterialDescriptorSets(coreReferences, commandBuffer, skyboxMaterial, frameIndex); 
         commandBuffer.bindVertexBuffers(0, *(cubeMesh.vertexBuffer.buffer), { 0 });
         commandBuffer.bindIndexBuffer(*cubeMesh.indexBuffer.buffer, 0, vk::IndexType::eUint32);
         commandBuffer.drawIndexed(cubeMesh.indexCount, 1, 0, 0, 0);
 
         // Bind Pipeline & Material
         shaderPipeline.Bind(commandBuffer);
-        shaderPipeline.BindDescriptorSets(commandBuffer, testMaterial.descriptorSets[frameIndex]);
+        shaderPipeline.BindMaterialDescriptorSets(coreReferences, commandBuffer, testMaterial, frameIndex, { 0 });
         
         // Bind Mesh
         commandBuffer.bindVertexBuffers(0, *(testRoom.vertexBuffer.buffer), { 0 }); // Bind buffer to our binding which has layout and stride stuff {0} is array of vertex buffers to bind
@@ -589,11 +618,11 @@ private:
         commandBuffer.drawIndexed(testRoom.indexCount, 1, 0, 0, 0);
 
         // Draw orb
-        /*reflectShader.Bind(commandBuffer);
-        reflectShader.BindDescriptorSets(commandBuffer, reflectMaterial.descriptorSets[frameIndex]);
+        // shaderPipeline.Bind(commandBuffer);
+        shaderPipeline.BindMaterialDescriptorSets(coreReferences, commandBuffer, blobMaterial, frameIndex, { 1 });
         commandBuffer.bindVertexBuffers(0, *(blobMesh.vertexBuffer.buffer), { 0 });
         commandBuffer.bindIndexBuffer(*(blobMesh.indexBuffer.buffer), 0, vk::IndexType::eUint32);
-        commandBuffer.drawIndexed(blobMesh.indexCount, 1, 0, 0, 0);*/
+        commandBuffer.drawIndexed(blobMesh.indexCount, 1, 0, 0, 0);
 
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *commandBuffer);
 
@@ -661,6 +690,7 @@ private:
 
     void CreateUniformBuffers() {
         uniformBuffers.clear(); // In case this is used as 'recreate'
+        uEntityBuffers.clear();
 
         // No staging buffer cuz we're updating this like every frame
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -668,6 +698,10 @@ private:
             uniformBuffers.back().Create(coreReferences, sizeof(UniformBufferObject), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
             uniformBuffers.back().MapMemory();
             // Persistent mapping
+
+            uEntityBuffers.emplace_back();
+            uEntityBuffers.back().Create(coreReferences, 2 * ceilToNearest(sizeof(UEntity), coreReferences.minUniformBufferOffsetAlignment), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+            uEntityBuffers.back().MapMemory();
         }
     }
 
@@ -676,6 +710,7 @@ private:
         // Inadequate descriptor pools may not be caught by validation layers
         std::array poolSize = {
             vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 100 * MAX_FRAMES_IN_FLIGHT),
+            vk::DescriptorPoolSize(vk::DescriptorType::eUniformBufferDynamic, 25 * MAX_FRAMES_IN_FLIGHT),
             vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, 100 * MAX_FRAMES_IN_FLIGHT),
             vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 5 * MAX_FRAMES_IN_FLIGHT)
         };
@@ -865,6 +900,10 @@ private:
         pass.FinishExecute(vk::ImageLayout::eShaderReadOnlyOptimal);
     }
 
+    void DebugUI() {
+        // ImGui::ShowDemoWindow();
+    }
+
     WBuffer* skySh;
     uPtr<ProbeVolume> envSh;
     ProbeCreator pc;
@@ -894,6 +933,8 @@ private:
             *coreReferences.descriptorPool, MAX_FRAMES_IN_FLIGHT,
             static_cast<VkFormat>(swapSurfaceFormat.format), static_cast<VkFormat>(GetDepthFormat())
         );
+        GUIManager::RegisterUIFunction(std::bind(&Application::DebugUI, this));
+        GUIManager::RegisterUIFunction(std::bind(&TestGame::DrawUI, &game));
 
         // Other stuff
         blobMesh.CreateFromFile(coreReferences, "models/blob.obj", true);
@@ -902,6 +943,7 @@ private:
         testRoom.CreateFromFile(coreReferences, "models/testRoom.obj", true);
         std::cout << "Test Room Index Count: " << testRoom.indexCount << std::endl;
 
+        whiteTexture.CreateFromFile(coreReferences, "textures/white.png", vk::Format::eR8G8B8A8Srgb);
         testTexture.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png", vk::Format::eR8G8B8A8Srgb);
         metallic.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_Metallic.tga.png", vk::Format::eR8G8B8A8Srgb);
         roughness.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_Roughness.tga.png", vk::Format::eR8G8B8A8Srgb);
@@ -939,6 +981,7 @@ private:
 
         vector shaderParams = {
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::DYNAMIC_UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
@@ -955,10 +998,20 @@ private:
         UpdateUniformBuffer(0);
         pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao);
         skySh = pc.BakeAndSetSkyboxProbe();
-        envSh = std::move(pc.BakeEnvironmentProbes(uvec3(4, 10, 4), vec3(0), vec3(15.5,9,15.5)));
+        envSh = std::move(pc.BakeEnvironmentProbes(uvec3(80, 40, 80), vec3(0), vec3(15.5,9,15.5)));
         //writeToCubemap();
         vector materialParams = {
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
+            ShaderParameter::MParameter(ShaderParameter::UDynamicUniform {
+                .buffers = &uEntityBuffers,
+                .singleObjectSize =
+                static_cast<vk::DeviceSize>(
+                    ceilToNearest(
+                        sizeof(UEntity), 
+                        coreReferences.minUniformBufferOffsetAlignment
+                    )
+                )
+            }),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testRoomTexture}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &metallic}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &roughness}),
@@ -970,6 +1023,29 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &envSh->probeLayoutUBO}),
         };
         testMaterial.Create(&shaderPipeline, coreReferences, materialParams);
+        vector blobMaterialParams = {
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
+            ShaderParameter::MParameter(ShaderParameter::UDynamicUniform {
+                .buffers = &uEntityBuffers,
+                .singleObjectSize =
+                static_cast<vk::DeviceSize>(
+                    ceilToNearest(
+                        sizeof(UEntity), 
+                        coreReferences.minUniformBufferOffsetAlignment
+                    )
+                )
+            }),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &whiteTexture}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &metallic}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &roughness}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.vertexBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.indexBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &envSh->shCoefficients}),
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &envSh->probeLayoutUBO}),
+        };
+        blobMaterial.Create(&shaderPipeline, coreReferences, blobMaterialParams);
         vector reflectShaderParams = {
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
@@ -996,19 +1072,37 @@ private:
         reflectMaterial.Create(&reflectShader, coreReferences, reflectMaterialParams);
 
         // testCompute();
+        
+    }
 
+    Camera camera = Camera(vec3(0), static_cast<float>(WIDTH) / static_cast<float>(HEIGHT), glm::radians(45.0f));
+    InputManager inputManager = InputManager(uvec2(WIDTH, HEIGHT));
+
+    float time;
+    float dt;
+    void UpdateTime() {
+        static auto startTime = std::chrono::high_resolution_clock::now();
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float prevTime = time;
+        time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+        dt = time - prevTime;
     }
 
     void UpdateUniformBuffer(uint32_t currFrame) {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+        vk::DeviceSize alignment = ceilToNearest(sizeof(UEntity), coreReferences.minUniformBufferOffsetAlignment);
+        vector<UEntity> entities = {
+            {.transform = game.roomTransform},
+            {.transform = game.ballTransform}
+        };
+        for (int i = 0; i < entities.size(); i++) {
+            memcpy(static_cast<char*>(uEntityBuffers[currFrame].mappedMemory) + i * alignment, &entities[i], sizeof(UEntity));
+        }
 
         UniformBufferObject ubo = {
             .off = time,
             .model = glm::scale(mat4(1.0f), vec3(0.014f+0.5)) * glm::rotate(mat4(1.0f), 0*time, vec3(0.0f, 1.0f, 0.0f)),
-            .view = glm::lookAt(mat3(glm::rotate(mat4(1.0f), time, vec3(0,1,0))) * vec3(0,2,5), vec3(0), vec3(0,1,0)),
-            .proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 1000.0f), // TODO: increase far
+            .view = camera.GetViewMatrix(),//glm::lookAt(mat3(glm::rotate(mat4(1.0f), time, vec3(0,1,0))) * vec3(0,2,5), vec3(0), vec3(0,1,0)),
+            .proj = camera.GetProjectionMatrix(),//glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 1000.0f), // TODO: increase far
         };
         /*ubo.model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f) * 0.0f, glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.view = lookAt(glm::vec3(4.0f * cos(time), 1.2f, 4.0f * sin(time)), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -1111,7 +1205,13 @@ private:
     void MainLoop() {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents(); // Check for User Input Events
+
+            UpdateTime();
             GUIManager::MainLoop();
+            inputManager.Update(window);
+            camera.Update(inputManager, dt);
+            game.Update(time, dt);
+
             DrawFrame();
         }
 

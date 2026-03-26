@@ -10,6 +10,7 @@ using WDescriptorSet = std::variant<vk::DescriptorImageInfo, vk::DescriptorBuffe
 void Material::Create(const WPipeline* pipeline, const VulkanReferences& ref, const vector<ShaderParameter::MParameter>& parameters, int duplicationCount) {
     this->pipeline = pipeline;
     this->duplicationCount = duplicationCount;
+    this->params = parameters;
 
     // Will probably need to do other stuff later too
     CreateDescriptorSets(ref, parameters);
@@ -65,6 +66,31 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     .descriptorType = vk::DescriptorType::eUniformBuffer,
                     .pBufferInfo = &std::get<vk::DescriptorBufferInfo>(ss[ss.size() - 1])
                 });
+                break;
+            case ShaderParameter::Type::DYNAMIC_UNIFORM:
+                bufIndex = i;
+                if (param.dynamicUniform.buffers->size() < duplicationCount) {
+                    std::cerr << "Uniform Buffer Duplication Count is SMALLER than material's duplication count, re-using final UBO for all remaining duplications!!" << std::endl;
+                    bufIndex = std::min(i, param.uniform.uniformBuffers->size() - 1);
+                }
+                if (param.dynamicUniform.buffers->size() > duplicationCount) {
+                    std::cerr << "Uniform Buffer Duplication Count is greater than material's duplication count, this is weird but COULD BE valid." << std::endl;
+                }
+                ss.push_back(
+                    vk::DescriptorBufferInfo{
+                        .buffer = (*param.dynamicUniform.buffers)[bufIndex].buffer,
+                        .offset = 0,
+                        .range = param.dynamicUniform.singleObjectSize
+                    }
+                );
+                ssWriters.push_back({
+                    .dstSet = descriptorSets[i],
+                    .dstBinding = j,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = vk::DescriptorType::eUniformBufferDynamic,
+                    .pBufferInfo = &std::get<vk::DescriptorBufferInfo>(ss[ss.size() - 1])
+                    });
                 break;
             case ShaderParameter::Type::SAMPLER:
                 ss.push_back({

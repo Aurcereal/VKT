@@ -17,6 +17,8 @@ public:
 	vector<vk::raii::DescriptorSet> descriptorSets;
 	const WPipeline* pipeline = nullptr;
 private:
+	friend class ShaderPipeline;
+	vector<ShaderParameter::MParameter> params;
 	void CreateDescriptorSets(const VulkanReferences&, const vector<ShaderParameter::MParameter>& parameters);// WTexture&, WTexture&, WTexture&, WTexture&, array<WBuffer*, 2>& meshBuffers);
 
 	int duplicationCount = -1;
@@ -24,7 +26,11 @@ private:
 
 struct UniformBufferObject {
 	alignas(4) float off;
-	alignas(16) mat4 model;
+	alignas(16) mat4 model; // TODO: remove
 	alignas(16) mat4 view;
 	alignas(16) mat4 proj;
+};
+
+struct UEntity {
+	mat4 transform;
 };

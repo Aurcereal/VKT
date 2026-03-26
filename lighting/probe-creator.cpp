@@ -1,5 +1,6 @@
 #include "probe-creator.h"
 #include <iostream>
+#include "helper/math.h"
 
 struct UProbePosition {
 	alignas(16) vec3 probePos;
@@ -9,13 +10,6 @@ struct UProbeLayout {
 	alignas(64) mat4 invTransform;
 	alignas(16) uvec3 probeCounts;
 };
-
-int ceilToNearest(int v, int m) {
-	int f = v % m;
-	int g = v / m;
-	std::cout << (g * m + (f != 0 ? 1 : 0)) << std::endl;
-	return g * m + (f != 0 ? 1 : 0);
-}
 
 // TODO: all these params def annoying so not having it, need to have some struct to represent the world
 void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<WBuffer>* uniformBuffers, WTexture* testCubeMap, Mesh* testRoom, WTexture* testRoomTexture, WTexture* metallic, WTexture* roughness, WTexture* ao) {

@@ -11,6 +11,9 @@ using namespace std;
 
 class InputManager {
 public:
+    inline InputManager(uvec2 dim) : screenDim(dim),
+        mousePosition(), lockMouseDelta(), f3(), f3Pressed(), w(), a(), s(), d(), space(), ctrl() { }
+
     void OnMouseMove(vec2 newPos);
     void OnMouseClick(bool leftMouse, bool pressDown);
     void OnMouseScroll(float scroll);
@@ -23,10 +26,15 @@ public:
     void Update(GLFWwindow*);
 
     vec2 mousePosition;
+    vec2 lockMouseDelta;
     bool lMouseDown = false;
     bool rMouseDown = false;
 
-    bool altDown;
+    bool f3, f3Pressed;
+    bool w, a, s, d;
+    bool space, ctrl;
+
+    uvec2 screenDim;
 
 private:
     vector<std::function<void(vec2, vec2)>> onMouseMoveListeners;

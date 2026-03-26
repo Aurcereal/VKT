@@ -10,6 +10,11 @@ struct UniformBuffer {
 };
 ConstantBuffer<UniformBuffer> ubo;
 
+struct UEntity {
+    float4x4 transform;
+};
+ConstantBuffer<UEntity> uTransform;
+
 struct VSInput {
     float3 position;
     float3 color;
@@ -38,12 +43,12 @@ struct FSInput {
 VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
     VSOutput vOut;
     float3 objPos = vIn.position;
-    float4 worldPos = mul(ubo.model, float4(objPos, 1.0));
+    float4 worldPos = mul(uTransform.transform, float4(objPos, 1.0));
     vOut.worldPos = worldPos.xyz;
     vOut.position = mul(ubo.proj, mul(ubo.view, worldPos));
     vOut.color = vIn.color;
     vOut.uv = vIn.uv;
-    vOut.norm = mul(ubo.model, float4(vIn.norm, 0.0)).xyz; // make do opposite scale (inv trans)
+    vOut.norm = mul(uTransform.transform, float4(vIn.norm, 0.0)).xyz; // make do opposite scale (inv trans)
     return vOut;
 }
 

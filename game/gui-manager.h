@@ -7,11 +7,12 @@
 #include "defines.h"
 
 #include <iostream>
+#include <vector>
+#include <functional>
 
 // TODO: move to cpp
 static void CheckVKResult(VkResult err)
 {
-    fprintf(stderr, "ok\n");
     if (err == 0)
         return;
     fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
@@ -25,5 +26,7 @@ public:
     static void MainLoop();
     static void Shutdown(VulkanReferences&);
 
-    // static void AddUIDrawFunciton..
+    static void RegisterUIFunction(const std::function<void()>&);
+private:
+    static std::vector<std::function<void()>> uiFunctions;
 };

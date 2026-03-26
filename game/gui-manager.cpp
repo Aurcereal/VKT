@@ -1,5 +1,7 @@
 #include "gui-manager.h"
 
+std::vector<std::function<void()>> GUIManager::uiFunctions;
+
 void GUIManager::Initialize(
     GLFWwindow* window, VkInstance instance,
     VkPhysicalDevice physicalDevice, VkDevice device,
@@ -41,7 +43,10 @@ void GUIManager::MainLoop() {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-    ImGui::ShowDemoWindow();
+    
+    for (std::function<void()>& f : uiFunctions) {
+        f();
+    }
 
     //ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
     //ImGui::Text("This is some useful text.");
@@ -67,4 +72,8 @@ void GUIManager::Shutdown(VulkanReferences& ref) {
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+}
+
+void GUIManager::RegisterUIFunction(const std::function<void()>& f) {
+    uiFunctions.push_back(f);
 }

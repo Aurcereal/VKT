@@ -33,6 +33,8 @@ struct VulkanReferences {
 	vk::raii::Queue computeQueue = nullptr;
 
 	vk::raii::DescriptorPool descriptorPool = nullptr;
+
+	vk::DeviceSize minUniformBufferOffsetAlignment;
 };
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2; // Shouldn't be too many, don't want GPU to fall behind CPU

@@ -10,6 +10,7 @@ using namespace std;
 namespace ShaderParameter {
 	enum class Type {
 		UNIFORM,
+		DYNAMIC_UNIFORM,
 		SAMPLER,
 		BUFFER
 	};
@@ -17,6 +18,11 @@ namespace ShaderParameter {
 	struct UUniform {
 		// We should have a notion of uniforms and whether they're frame in flight duplicated like a uniform.h...
 		const vector<WBuffer>* uniformBuffers;
+	};
+
+	struct UDynamicUniform {
+		const vector<WBuffer>* buffers;
+		vk::DeviceSize singleObjectSize;
 	};
 
 	struct USampler {
@@ -31,11 +37,13 @@ namespace ShaderParameter {
 		Type type;
 		union {
 			UUniform uniform;
+			UDynamicUniform dynamicUniform;
 			USampler sampler;
 			UBuffer buffer;
 		};
 
 		inline MParameter(UUniform u) : type(Type::UNIFORM), uniform(u) {}
+		inline MParameter(UDynamicUniform u) : type(Type::DYNAMIC_UNIFORM), dynamicUniform(u) {}
 		inline MParameter(USampler s) : type(Type::SAMPLER), sampler(s) {}
 		inline MParameter(UBuffer b) : type(Type::BUFFER), buffer(b) {}
 	};

@@ -5,6 +5,7 @@
 #include "scene/mesh.h"
 #include "scene/material.h"
 #include "scene/shader-parameter.h"
+#include "helper/math.h"
 
 #include <iostream>
 
@@ -200,10 +201,14 @@ void WPipeline::CreateDescriptorSetLayout(const VulkanReferences& ref, const vec
         switch (param.type) {
         case ShaderParameter::Type::UNIFORM:
             dType = vk::DescriptorType::eUniformBuffer; break;
+        case ShaderParameter::Type::DYNAMIC_UNIFORM:
+            dType = vk::DescriptorType::eUniformBufferDynamic; break;
         case ShaderParameter::Type::SAMPLER:
             dType = vk::DescriptorType::eCombinedImageSampler;  break;
         case ShaderParameter::Type::BUFFER:
             dType = vk::DescriptorType::eStorageBuffer; break;
+        default:
+            assert(false); break;
         }
         bindingLayouts.emplace_back(i, dType, 1, param.visibility);
     }
@@ -219,7 +224,19 @@ void ShaderPipeline::Bind(const vk::raii::CommandBuffer& cmd) const {
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
 }
 void ShaderPipeline::BindDescriptorSets(const vk::raii::CommandBuffer& cmd, const vk::raii::DescriptorSet& descriptorSet) const {
+    assert(false); // dont use this method anymore
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSet, nullptr); // change nullptr to offsets
+}
+void ShaderPipeline::BindMaterialDescriptorSets(const VulkanReferences& ref, const vk::raii::CommandBuffer& cmd, const Material& mat, uint32_t setIndex, vector<uint32_t> dynamicIndices) {
+    vector<uint32_t> dynamicOffsets;
+    int i = 0;
+    for (const auto& param : mat.params) {
+        if (param.type == ShaderParameter::Type::DYNAMIC_UNIFORM) {
+            dynamicOffsets.push_back(dynamicIndices[i] * ceilToNearest(param.dynamicUniform.singleObjectSize, ref.minUniformBufferOffsetAlignment));
+            ++i;
+        }
+    }
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *mat.descriptorSets[setIndex], dynamicOffsets);
 }
 
 void ComputePipeline::Create(const VulkanReferences& ref, const string& path, const vector<ShaderParameter::SParameter>& parameters, const vector<ShaderParameter::MParameter>& parameterData, uvec3 workGroupSize) {

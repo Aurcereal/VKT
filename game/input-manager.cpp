@@ -22,7 +22,7 @@ void InputManager::OnMouseMove(vec2 newPos) {
     for(auto &f : onMouseMoveListeners) {
         f(newPos, newPos - mousePosition);
     }
-    mousePosition = newPos;
+    // mousePosition = newPos;
 }
 
 void InputManager::OnMouseClick(bool leftMouse, bool pressDown) {
@@ -56,7 +56,34 @@ void InputManager::OnMouseScroll(float scroll) {
 
 void InputManager::Update(GLFWwindow* window) {
     ImGuiIO &io = ImGui::GetIO();
-    if(io.WantCaptureKeyboard) return;
+    /*if (io.WantCaptureKeyboard) {
+        std::cout << "imgui steal" << std::endl;
+    }*/
 
-    altDown = glfwGetKey(window, GLFW_KEY_LEFT_ALT);
+    // Handle mouse locking w/ f3
+    bool prevF3 = f3;
+    f3 = glfwGetKey(window, GLFW_KEY_F3);
+    f3Pressed = f3 && !prevF3;
+    bool cursorUnlocked = glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL;
+    if (f3Pressed) {
+        glfwSetInputMode(window, GLFW_CURSOR, cursorUnlocked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        cursorUnlocked = !cursorUnlocked;
+    }
+
+    // Update mouse
+    double xpos, ypos;
+    glfwGetCursorPos(window, &xpos, &ypos);
+    vec2 newPos = vec2(xpos, ypos) / vec2(screenDim);
+    newPos.y = 1.0f - newPos.y;
+
+    lockMouseDelta = cursorUnlocked ? vec3(0) : newPos - mousePosition;
+    mousePosition = newPos;
+
+    // Other keys
+    w = glfwGetKey(window, GLFW_KEY_W);
+    a = glfwGetKey(window, GLFW_KEY_A);
+    s = glfwGetKey(window, GLFW_KEY_S);
+    d = glfwGetKey(window, GLFW_KEY_D);
+    space = glfwGetKey(window, GLFW_KEY_SPACE);
+    ctrl = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL);
 }
