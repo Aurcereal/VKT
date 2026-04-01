@@ -209,12 +209,12 @@ void WTexture::TransitionImageLayout(
 
 // Hardcoded src, dst access mask as well as src, dst stage (src is what must be done before barrier, and barrier must be done before dst)
 // TODO: ASSUMING COLOR BAD FOR DEPTH TEX
-void WTexture::TransitionImageLayoutHardcodedEnqueue(CommandBuffer* cmd, const VulkanReferences& ref, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
+void WTexture::StaticTransitionImageLayoutHardcodedEnqueue(CommandBuffer* cmd, const VulkanReferences& ref, vk::Image img, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t arrLayerCount) {
     vk::ImageMemoryBarrier barrier = {
         .oldLayout = oldLayout,
         .newLayout = newLayout,
-        .image = image,
-        .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, arrayLayerCount }
+        .image = img,
+        .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, arrLayerCount }
     };
 
     // TODO: Can we just make src a func of old and dst a func of new?
@@ -260,11 +260,22 @@ void WTexture::TransitionImageLayoutHardcodedEnqueue(CommandBuffer* cmd, const V
 
         srcStage = vk::PipelineStageFlagBits::eTransfer;
         dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    }
+    else if (oldLayout == vk::ImageLayout::eColorAttachmentOptimal && newLayout == vk::ImageLayout::ePresentSrcKHR) {
+        barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+        barrier.dstAccessMask = {};
+
+        srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+        dstStage = vk::PipelineStageFlagBits::eBottomOfPipe;
     } else {
         throw std::invalid_argument("unsupported layout transition");
     }
 
-    cmd->pipelineBarrier(srcStage, dstStage, {}, {}, nullptr, barrier); // TODO: make static one so rendertarget doesnt need tex
+    cmd->pipelineBarrier(srcStage, dstStage, {}, {}, nullptr, barrier);
+}
+
+void WTexture::TransitionImageLayoutHardcodedEnqueue(CommandBuffer* cmd, const VulkanReferences& ref, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
+    StaticTransitionImageLayoutHardcodedEnqueue(cmd, ref, image, oldLayout, newLayout, arrayLayerCount);
 }
 
 void WTexture::TransitionImageLayoutHardcoded(const VulkanReferences& ref, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {

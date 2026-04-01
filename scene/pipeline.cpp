@@ -227,7 +227,7 @@ void ShaderPipeline::BindDescriptorSets(const vk::raii::CommandBuffer& cmd, cons
     assert(false); // dont use this method anymore
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSet, nullptr); // change nullptr to offsets
 }
-void ShaderPipeline::BindMaterialDescriptorSets(const VulkanReferences& ref, const vk::raii::CommandBuffer& cmd, const Material& mat, uint32_t setIndex, vector<uint32_t> dynamicIndices) {
+void ShaderPipeline::BindMaterialDescriptorSets(const VulkanReferences& ref, const vk::raii::CommandBuffer& cmd, const Material& mat, uint32_t setIndex, vector<uint32_t> dynamicIndices) const {
     vector<uint32_t> dynamicOffsets;
     int i = 0;
     for (const auto& param : mat.params) {

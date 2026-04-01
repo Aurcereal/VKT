@@ -630,7 +630,7 @@ private:
         // END RENDER
 
         // Have to transition image layout to presentable format
-        WTexture::TransitionImageLayout(
+        WTexture::TransitionImageLayout( // todo: trans in finishexec and check hardcoded same
             commandBuffer,
             swapChainImages[imageIndex],
             vk::ImageLayout::eColorAttachmentOptimal,
@@ -886,18 +886,18 @@ private:
         ImageView colorView = writtenToCubemap.CreateImageView(coreReferences, 2);
 
         RenderTarget target;
-        target.CreateFromTexture(&writtenToCubemap, &colorView, &tempDepthTexture, &tempDepthTexture.view);
+        target.CreateFromTexture(&writtenToCubemap, colorView, &tempDepthTexture, tempDepthTexture.view);
 
         WRenderPass pass;
         pass.Create(coreReferences);
 
         CommandBuffer cmd = BeginOneTimeCommands(coreReferences);
-        pass.Start(&target, &cmd);
+        pass.Start(&target, &cmd); // TOdo: put semaphore
 
-        pass.EnqueueSetMaterial(deferredMaterial);
+        pass.EnqueueSetMaterial(deferredMaterial, 0);
         pass.EnqueueDraw(chairMesh);
         
-        pass.FinishExecute(vk::ImageLayout::eShaderReadOnlyOptimal);
+        pass.FinishExecute(true, vk::ImageLayout::eShaderReadOnlyOptimal);
     }
 
     void DebugUI() {
@@ -910,9 +910,11 @@ private:
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             renderPasses.emplace_back();
             renderPasses[i].Create(coreReferences);
+        }
 
+        for (int i = 0; i < swapChainImages.size(); i++) {
             renderTargets.emplace_back();
-            renderTargets[i].CreateFromTexture()
+            renderTargets[i].CreateFromImage(swapChainImages[i], swapChainImageViews[i], depthTexture.image, depthTexture.view, uvec2(swapChainExtent.width, swapChainExtent.height));
         }
     }
 
@@ -1012,7 +1014,7 @@ private:
         UpdateUniformBuffer(0);
         pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao);
         skySh = pc.BakeAndSetSkyboxProbe();
-        envSh = std::move(pc.BakeEnvironmentProbes(uvec3(80, 40, 80), vec3(0), vec3(15.5,9,15.5)));
+        envSh = std::move(pc.BakeEnvironmentProbes(uvec3(4,2,4), vec3(0), vec3(15.5,9,15.5)));
         //writeToCubemap();
         vector materialParams = {
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
@@ -1114,7 +1116,7 @@ private:
 
         UniformBufferObject ubo = {
             .off = time,
-            .model = glm::scale(mat4(1.0f), vec3(0.014f+0.5)) * glm::rotate(mat4(1.0f), 0*time, vec3(0.0f, 1.0f, 0.0f)),
+            .model = glm::scale(mat4(1.0f), vec3(0.014f+0.5)) * glm::rotate(mat4(1.0f), 0*time + glm::radians(0.0f), vec3(0.0f, 1.0f, 0.0f)),
             .view = camera.GetViewMatrix(),//glm::lookAt(mat3(glm::rotate(mat4(1.0f), time, vec3(0,1,0))) * vec3(0,2,5), vec3(0), vec3(0,1,0)),
             .proj = camera.GetProjectionMatrix(),//glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 1000.0f), // TODO: increase far
         };
@@ -1173,32 +1175,40 @@ private:
             throw new std::runtime_error("Failed to acquire swap chain img");
         }
 
+        auto& renderTarget = renderTargets[imageIndex];
         auto& renderFinishedSemaphore = renderFinishedSemaphores[imageIndex]; // This semaphore is per image because if it was per frame, a different frame in flight could be using a different semaphore on an image that hasn't finished being rendered to, since the semaphore would be different, it'd go through and we'd overwrite the image being drawn to
 
-        renderPass.Start()
+        
 
         // We know we're not returning early, so put the fence back up so it'll be signaled on draw
-        coreReferences.device.resetFences(*drawFence); // Put fence back up
+        //coreReferences.device.resetFences(*drawFence); // Put fence back up
 
+        renderPass.Start(&renderTarget, &commandBuffer, false); // bit dangerous; pointers to vector elems
+        renderPass.EnqueueSetMaterial(skyboxMaterial, currFrameIndex);
+        renderPass.EnqueueDraw(cubeMesh);
+        renderPass.EnqueueSetMaterial(testMaterial, currFrameIndex, { 0 });
+        renderPass.EnqueueDraw(testRoom);
+        renderPass.EnqueueSetMaterial(blobMaterial, currFrameIndex, { 1 });
+        renderPass.EnqueueDraw(blobMesh);
+        //// Record drawing cmds
+        //commandBuffer.reset();
+        //RecordCommandBuffer(commandBuffer, imageIndex, currFrameIndex);
 
-        // Record drawing cmds
-        commandBuffer.reset();
-        RecordCommandBuffer(commandBuffer, imageIndex, currFrameIndex);
+        renderPass.FinishExecute(false, vk::ImageLayout::ePresentSrcKHR, &presentCompleteSemaphore, &renderFinishedSemaphore);
+        //vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        //const vk::SubmitInfo submitInfo = {
+        //    .waitSemaphoreCount = 1,
+        //    .pWaitSemaphores = &*presentCompleteSemaphore, // Wait for this semaphore to signal
+        //    .pWaitDstStageMask = &waitDstStageMask, // Write colors
 
-        vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        const vk::SubmitInfo submitInfo = {
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &*presentCompleteSemaphore, // Wait for this semaphore to signal
-            .pWaitDstStageMask = &waitDstStageMask, // Write colors
+        //    .commandBufferCount = 1,
+        //    .pCommandBuffers = &*commandBuffer, // Submit this cmd buffer
 
-            .commandBufferCount = 1,
-            .pCommandBuffers = &*commandBuffer, // Submit this cmd buffer
+        //    .signalSemaphoreCount = 1,
+        //    .pSignalSemaphores = &*renderFinishedSemaphore // Signal once done
+        //};
 
-            .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &*renderFinishedSemaphore // Signal once done
-        };
-
-        coreReferences.graphicsQueue.submit(submitInfo, *drawFence); // Fence will be put down when done
+        //coreReferences.graphicsQueue.submit(submitInfo, *drawFence); // Fence will be put down when done
 
         const vk::PresentInfoKHR presentInfoKHR = {
             .waitSemaphoreCount = 1,

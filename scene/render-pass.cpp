@@ -1,4 +1,6 @@
 #include "render-pass.h"
+#include "imgui/imgui.h"
+#include "imgui/backends/imgui_impl_vulkan.h"
 
 void WRenderPass::Create(const VulkanReferences& ref) {
     this->ref = &ref;
@@ -17,24 +19,24 @@ void WRenderPass::Start(RenderTarget* target, vk::raii::CommandBuffer* cmd, bool
     currCmd->reset();
     currCmd->begin({}); // could put flags in here
 
-    // Transition to COLOR ATTACHMENT OPTIMAL
-    //WTexture::TransitionImageLayout(
-    //    *currCmd,
-    //    *(target->colorTex->image),
-    //    vk::ImageLayout::eUndefined, // From any?
-    //    vk::ImageLayout::eColorAttachmentOptimal, // To this format
-    //    {}, // What access to wait for?  We don't wanna wait for anything
-    //    vk::AccessFlagBits2::eColorAttachmentWrite,
-    //    vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-    //    vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-    //    vk::ImageAspectFlagBits::eColor, target->colorTex->arrayLayerCount);
-    // doing this makes the entire cubemap texture look horrible for some reason, it should be redundant (texture creation already transitions) but idk why it's bad, idk why, maybe ask taaron
+    WTexture::TransitionImageLayout(
+        *currCmd,
+        target->colorImg,
+        vk::ImageLayout::eUndefined, // From any?
+        vk::ImageLayout::eColorAttachmentOptimal, // To this format
+        {}, // What access to wait for?  We don't wanna wait for anything
+        vk::AccessFlagBits2::eColorAttachmentWrite,
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::ImageAspectFlagBits::eColor, target->layerCount);
+    // doing this makes the entire cubemap texture look horrible for some reason, it should be redundant for cubemap (texture creation already transitions) but idk why it's bad, idk why, maybe ask taaron
+    // however, for rendering to swapchain image every frame, it's necessary
 
     // Transition the depth image to its optimal (from whatever it was we dont care)
     if (target->depthImg) {
         WTexture::TransitionImageLayout(
             *currCmd,
-            *target->depthImg,
+            target->depthImg,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eDepthAttachmentOptimal,
             vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
@@ -47,7 +49,7 @@ void WRenderPass::Start(RenderTarget* target, vk::raii::CommandBuffer* cmd, bool
 
     vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
     vk::RenderingAttachmentInfo colorAttachmentInfo = {
-        .imageView = *target->colorView,
+        .imageView = target->colorView,
         .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
         .loadOp = vk::AttachmentLoadOp::eClear, // what to do before rendering?
         .storeOp = vk::AttachmentStoreOp::eStore, // what to do after rendering?
@@ -58,7 +60,7 @@ void WRenderPass::Start(RenderTarget* target, vk::raii::CommandBuffer* cmd, bool
     if (target->depthImg) {
         vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
         depthAttachmentInfo = {
-            .imageView = *target->depthView,
+            .imageView = target->depthView,
             .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
             .loadOp = vk::AttachmentLoadOp::eClear,
             .storeOp = vk::AttachmentStoreOp::eDontCare, // no need to keep depth
@@ -84,9 +86,9 @@ void WRenderPass::Start(RenderTarget* target, vk::raii::CommandBuffer* cmd, bool
     currCmd->setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), { target->dim.x, target->dim.y }));
 }
 
-void WRenderPass::EnqueueSetMaterial(const Material& mat) {
+void WRenderPass::EnqueueSetMaterial(const Material& mat, int setIndex, vector<uint32_t> dynamicIndices) {
     (static_cast<const ShaderPipeline*>(mat.pipeline))->Bind(*currCmd);
-    (static_cast<const ShaderPipeline*>(mat.pipeline))->BindDescriptorSets(*currCmd, mat.descriptorSets[0]); // Assuming doesn't use frames in flight
+    (static_cast<const ShaderPipeline*>(mat.pipeline))->BindMaterialDescriptorSets(*ref, *currCmd, mat, setIndex, dynamicIndices);
 }
 
 void WRenderPass::EnqueueDraw(const Mesh& mesh) {
@@ -96,9 +98,10 @@ void WRenderPass::EnqueueDraw(const Mesh& mesh) {
 }
 
 // TODO: also a transition for depth maybe?
-void WRenderPass::FinishExecute(vk::ImageLayout postTargetColorLayout, bool waitForFinish, vk::raii::Semaphore* waitSemaphore, vk::raii::Semaphore* signalSemaphore) {
+void WRenderPass::FinishExecute(bool waitForFinish, vk::ImageLayout postTargetColorLayout, vk::raii::Semaphore* waitSemaphore, vk::raii::Semaphore* signalSemaphore) {
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), **currCmd);
     currCmd->endRendering();
-    target->colorTex->TransitionImageLayoutHardcodedEnqueue(currCmd, *ref, vk::ImageLayout::eColorAttachmentOptimal, postTargetColorLayout);
+    if(postTargetColorLayout != vk::ImageLayout::eUndefined) WTexture::StaticTransitionImageLayoutHardcodedEnqueue(currCmd, *ref, target->colorImg, vk::ImageLayout::eColorAttachmentOptimal, postTargetColorLayout);
     currCmd->end();
 
     vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);

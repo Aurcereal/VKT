@@ -27,11 +27,9 @@ public:
         vk::ImageUsageFlags usage,
         vk::MemoryPropertyFlags properties, vk::ImageAspectFlags imageViewAspectFlags = vk::ImageAspectFlagBits::eColor,
         uint32_t arrayLayerCount = 1, bool cubeMap = false);
-    void CreateFromExternalImage(const VulkanReferences& ref, const Image&, const ImageView&, uvec2 dim);
 
     void CopyFromBuffer(const VulkanReferences& ref, const WBuffer& buffer, vk::DeviceSize bufferOffset = 0, uint32_t arrayLayer = 0);
-    void TransitionImageLayoutHardcoded(const VulkanReferences& ref, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
-    void TransitionImageLayoutHardcodedEnqueue(CommandBuffer*, const VulkanReferences& ref, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+
     static void TransitionImageLayout(
         vk::raii::CommandBuffer& commandBuffer,
         vk::Image image,
@@ -40,6 +38,12 @@ public:
         vk::PipelineStageFlags2 srcStageMask, vk::PipelineStageFlags2 dstStageMask,
         vk::ImageAspectFlags imageAspectFlags, uint32_t baseArrayLayers
     );
+
+    void TransitionImageLayoutHardcoded(const VulkanReferences& ref, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+    void TransitionImageLayoutHardcodedEnqueue(CommandBuffer*, const VulkanReferences& ref, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+    
+    static void StaticTransitionImageLayoutHardcodedEnqueue(CommandBuffer*, const VulkanReferences& ref, vk::Image img, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t arrLayerCount = 1);
+    
     void CreateSampler(const VulkanReferences& ref);
 
     ImageView CreateImageView(const VulkanReferences& ref, uint32_t arrayLayer, vk::ImageAspectFlags aspectFlags = vk::ImageAspectFlagBits::eColor);

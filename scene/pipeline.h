@@ -26,7 +26,7 @@ public:
     void Create(const VulkanReferences& ref, const string& path, const vk::Format* colorFormats, const vk::Format& depthFormat, const vector<ShaderParameter::SParameter>& parameters, bool depthEnabled = true, bool flipFaces = false);
     void Bind(const vk::raii::CommandBuffer& cmd) const;
     void BindDescriptorSets(const vk::raii::CommandBuffer& cmd, const vk::raii::DescriptorSet& descriptorSet) const; // Link bindings to our binding layout (WebGPU terminology)
-    void BindMaterialDescriptorSets(const VulkanReferences& ref, const vk::raii::CommandBuffer& cmd, const Material& mat, uint32_t setIndex, vector<uint32_t> dynamicIndices = {});
+    void BindMaterialDescriptorSets(const VulkanReferences& ref, const vk::raii::CommandBuffer& cmd, const Material& mat, uint32_t setIndex, vector<uint32_t> dynamicIndices = {}) const;
     
 };
 
