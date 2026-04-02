@@ -95,5 +95,16 @@ Need to do probe visibility checking & optimize probe bake compute shader, likel
 - How do we sample the depth textures though?  We have E(depth) and E(depth^2) so we can use that to get variance.  We then use the chebychev inequality so that visibility is smoother for depth samples that have higher variance.
 ![alt text](image.png)
 
-## Addition
+## Scheduling
 - Instead of each compute pass baking lots of rays for a probe, could make it so each compute pass bakes a few rays for each probe.  This avoids the scratch buffer and the atomics since we can just do smth more similar to monte calro pathtracing where we add into the texture each time.
+- Could cycle through probes.  If I have like 64,000 probes, can bake like 256 probes per compute pass (each group does its own probe and we can have 256 thread groups), and we cycle through, so the probes that satisfy probeID % probeGroupCount == probeGroupIndex get baked.  The group size is 256 since we bake a group per pass, so group count should be ceil(64000/256).  We cycle through each group many times of course since 64 samples per probe isn't nearly enough.  We need to put a compute barrier before cycling back.
+- To make the samples always valid, whenever we add on a pack of sampled sh coefficients, can have a sh[27] index reserved for SampleCount, so if SampleCount = 3*64 for 3 prev samples, assuming sh previously was valid, newSh = (oldSh * SampleCount + newSample * 64)/(SampleCount + 64) then sh[27] += 64.
+```cpp
+loop(bakeCount) {
+    for(i in 0..groupCount) {
+        // Each group gets 8x8 samples
+        bakeGroup(i)
+    }
+    computeBarrier()
+}
+```
