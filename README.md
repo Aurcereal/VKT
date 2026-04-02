@@ -84,6 +84,10 @@ Need to do probe visibility checking & optimize probe bake compute shader, likel
 - Uniform Ring Buffer for multiple game objects being stored optimally in same material
 
 ---
+## 4/1/2026 Update
+![](ShowcaseMedia/debugProbes.gif)
+
+---
 ## Visibility/Weighting Plan
 
 - Max dimensions of texture on device
