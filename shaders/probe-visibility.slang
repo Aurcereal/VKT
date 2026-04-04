@@ -13,7 +13,7 @@ public uint2 DirectionToTexel(float3 dir) {
 
     float2 uv = dir.xy;
     if (dir.z <= 0.) {
-        uv = float2(sign(uv.x), sign(uv.y)) * (1. - abs(uv));
+        uv = sign(uv) * (1. - abs(uv.yx));
     }
     uv = uv * 0.5 + 0.5;
 
@@ -26,8 +26,7 @@ public float3 TexelToDirection(uint2 texel) {
 
     float h = 1. - abs(uv.x) - abs(uv.y);
     if (h <= 0.) {
-        uv.x = sign(uv.x) * (1. - abs(uv.y));
-        uv.y = sign(uv.y) * (1. - abs(uv.x));
+        uv = sign(uv) * (1. - abs(uv.yx));
     }
 
     return normalize(float3(uv, h));
