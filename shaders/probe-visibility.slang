@@ -12,20 +12,20 @@ public uint2 DirectionToTexel(float3 dir) {
     dir = normalize(dir) / (adir.x + adir.y + adir.z);
 
     float2 uv = dir.xy;
-    if (dir.z < 0.) {
+    if (dir.z <= 0.) {
         uv = float2(sign(uv.x), sign(uv.y)) * (1. - abs(uv));
     }
     uv = uv * 0.5 + 0.5;
 
-    return uint2(16.0 * uv);
+    return uint2(15.99999 * uv);
 }
 
 public float3 TexelToDirection(uint2 texel) {
-    float2 uv = float2(texel) / 16.0;
+    float2 uv = (float2(texel)+0.5) / 16.0;
     uv = uv * 2. - 1.;
 
     float h = 1. - abs(uv.x) - abs(uv.y);
-    if (h < 0.) {
+    if (h <= 0.) {
         uv.x = sign(uv.x) * (1. - abs(uv.y));
         uv.y = sign(uv.y) * (1. - abs(uv.x));
     }

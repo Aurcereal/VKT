@@ -178,11 +178,16 @@ void main(uint3 id: SV_DispatchThreadID,
             int2 texel = int2(16)+int2(DirectionToTexel(rd));
 
             // Splat 5x5
-            for (int y = -2; y <= 2; y++) {
-                for (int x = -2; x <= 2; x++) {
+            const int r = 1;
+            for (int y = -r; y <= r; y++) {
+                for (int x = -r; x <= r; x++) {
                     int2 currTexel = (texel + int2(x, y)) % int2(16);
+                    bool2 looped = currTexel != (texel - int2(16) + int2(x, y));
+                    if ((!looped.x && looped.y) || (looped.x && !looped.y)) {
+                        currTexel = 16 - 1 - currTexel;
+                    }
 
-                    float weight = pow(max(0., dot(rd, TexelToDirection(currTexel))), 8.);
+                    float weight = pow(max(0., dot(rd, TexelToDirection(currTexel))), 32.);
 
                     uint ind = TexelToBufferIndices(probeToBake, currTexel);
                     depthBuffer[ind + 0] += depth * weight;
