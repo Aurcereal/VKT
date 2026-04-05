@@ -1,12 +1,8 @@
+import probe_helper;
+
 module SHSampling;
 
 #define PI 3.141592
-
-public struct UProbeVolumeLayout {
-    public float4x4 invTransform; // TODO: make private, only public for debug purposes
-    public float4x4 transform;
-    public uint3 probeCounts;
-};
 
 uint probeIDToOffset(uint3 probeCounts, uint3 id) {
     return 28 * (probeCounts.x * probeCounts.y * id.z + probeCounts.x * id.y + id.x);

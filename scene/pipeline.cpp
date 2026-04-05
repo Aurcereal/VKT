@@ -207,6 +207,8 @@ void WPipeline::CreateDescriptorSetLayout(const VulkanReferences& ref, const vec
             dType = vk::DescriptorType::eCombinedImageSampler;  break;
         case ShaderParameter::Type::BUFFER:
             dType = vk::DescriptorType::eStorageBuffer; break;
+        case ShaderParameter::Type::STORAGE_TEXTURE:
+            dType = vk::DescriptorType::eStorageImage; break;
         default:
             assert(false); break;
         }

@@ -1,5 +1,6 @@
 import Raytracing;
 import probe_visibility;
+import probe_helper;
 
 groupshared float3[64][9] sharedCoefficients;
 groupshared float4[64] sharedDepthSamples;
@@ -10,15 +11,7 @@ struct UniformBuffer {
     float4x4 view;
     float4x4 proj;
 };
-// struct ProbePositionUBO {
-//     float3 probePos;
-// };
-struct UProbeVolumeLayout {
-    float4x4 invTransform;
-    float4x4 transform;
-    uint3 probeCounts;
-};
-// ConstantBuffer<ProbePositionUBO> probePositionUBO;
+
 ConstantBuffer<UniformBuffer> ubo;
 SamplerCube skybox;
 StructuredBuffer<Vertex> worldVertices;
@@ -85,10 +78,7 @@ float3 uniformSphere(float2 xi) {
 }
 
 float3 probeIDToPos(uint id) {
-    uint x = id % probeLayout.probeCounts.x;
-    uint y = (id / probeLayout.probeCounts.x) % probeLayout.probeCounts.y;
-    uint z = (id / (probeLayout.probeCounts.x * probeLayout.probeCounts.y));
-    float3 uv = float3(x, y, z) / float3(probeLayout.probeCounts - 1);
+    float3 uv = get3DProbeID(probeLayout.probeCounts, id) / float3(probeLayout.probeCounts - 1);
     float3 pos = mul(probeLayout.transform, float4(uv, 1.0)).xyz;
     return pos;
 }

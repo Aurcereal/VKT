@@ -1,6 +1,7 @@
 import Raytracing;
 import PBR;
 import sh_sampling;
+import probe_helper;
 
 struct UniformBuffer {
     float off;
@@ -52,6 +53,7 @@ VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
     return vOut;
 }
 
+// TODO: these are combined image samplers w/ image, but they all use same sampler so i can just separate explicitly Texture2D and SamplerState have 1 sampler and lots of textures (need to change descriptor pool oc)
 Sampler2D texSampler;
 Sampler2D metallicSampler;
 Sampler2D roughnessSampler;

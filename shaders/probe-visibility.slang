@@ -1,15 +1,10 @@
+import probe_helper;
 module ProbeVisibility;
 
-struct UProbeVolumeLayout {
-    float4x4 invTransform;
-    float4x4 transform;
-    uint3 probeCounts;
-};
-
-// Assuming 16x16
-public uint2 DirectionToTexel(float3 dir) {
+public float2 DirectionToUV(float3 dir) {
+    dir = normalize(dir);
     float3 adir = abs(dir);
-    dir = normalize(dir) / (adir.x + adir.y + adir.z);
+    dir = dir / (adir.x + adir.y + adir.z);
 
     float2 uv = dir.xy;
     if (dir.z <= 0.) {
@@ -17,6 +12,12 @@ public uint2 DirectionToTexel(float3 dir) {
     }
     uv = uv * 0.5 + 0.5;
 
+    return uv;
+}
+
+// Assuming 16x16
+public uint2 DirectionToTexel(float3 dir) {
+    float2 uv = DirectionToUV(dir);
     return uint2(15.99999 * uv);
 }
 
@@ -41,3 +42,8 @@ public float GetNormalizedDepth(uint probeID, uint2 texel, StructuredBuffer<floa
     uint ind = TexelToBufferIndices(probeID, texel);
     return depthBuffer[ind + 0] / depthBuffer[ind + 1];
 }
+
+public float GetInterpolatedDepth(uint3 probeCounts, uint3 probeID, float2 uv, Sampler2D<float> depthTexture) {
+    return depthTexture.Sample(localUVToAtlasUV(probeCounts, probeID, uv));
+}
+

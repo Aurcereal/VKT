@@ -12,7 +12,8 @@ namespace ShaderParameter {
 		UNIFORM,
 		DYNAMIC_UNIFORM,
 		SAMPLER,
-		BUFFER
+		BUFFER,
+		STORAGE_TEXTURE
 	};
 
 	struct UUniform {
@@ -33,6 +34,10 @@ namespace ShaderParameter {
 		WBuffer* buffer;
 	};
 
+	struct UStorageTexture {
+		WTexture* texture;
+	};
+
 	struct MParameter {
 		Type type;
 		union {
@@ -40,12 +45,14 @@ namespace ShaderParameter {
 			UDynamicUniform dynamicUniform;
 			USampler sampler;
 			UBuffer buffer;
+			UStorageTexture storageTexture;
 		};
 
 		inline MParameter(UUniform u) : type(Type::UNIFORM), uniform(u) {}
 		inline MParameter(UDynamicUniform u) : type(Type::DYNAMIC_UNIFORM), dynamicUniform(u) {}
 		inline MParameter(USampler s) : type(Type::SAMPLER), sampler(s) {}
 		inline MParameter(UBuffer b) : type(Type::BUFFER), buffer(b) {}
+		inline MParameter(UStorageTexture s) : type(Type::STORAGE_TEXTURE), storageTexture(s) {}
 
 		// inline ~MParameter() {}
 	};

@@ -2,6 +2,7 @@ import Raytracing;
 import PBR;
 import sh_sampling;
 import probe_visibility;
+import probe_helper;
 
 struct UniformBuffer {
     float off;
@@ -18,6 +19,7 @@ ConstantBuffer<UniformBuffer> ubo;
 ConstantBuffer<UEntity> uTransform;
 ConstantBuffer<UProbeVolumeLayout> probeLayout;
 StructuredBuffer<float> depthBuffer;
+[[vk::image_format("r32f")]] Sampler2D<float> depthTexture;
 
 struct VSInput {
     float3 position;
@@ -58,10 +60,6 @@ VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
 
 #define DEBUG_OUT_OF_BOUNDS 1
 
-uint get1DProbeID(uint3 probeCounts, uint3 id) {
-    return (probeCounts.x * probeCounts.y * id.z + probeCounts.x * id.y + id.x);
-}
-
 float SampleInterpolatedDepth(float3 rd, float3 pos) {
     float3 lp = mul(probeLayout.invTransform, float4(pos, 1.)).xyz; // [0, 1] unless out of bounds
     lp = clamp(lp, float3(0.), float3(0.99999)); // [0, 1)
@@ -72,14 +70,14 @@ float SampleInterpolatedDepth(float3 rd, float3 pos) {
     uint3 id = uint3(lp);
     uint2 d = uint2(1, 0);
 
-    float c000 = GetNormalizedDepth(get1DProbeID(probeLayout.probeCounts, id + d.yyy), DirectionToTexel(rd), depthBuffer);
-    float c001 = GetNormalizedDepth(get1DProbeID(probeLayout.probeCounts, id + d.yyx), DirectionToTexel(rd), depthBuffer);
-    float c010 = GetNormalizedDepth(get1DProbeID(probeLayout.probeCounts, id + d.yxy), DirectionToTexel(rd), depthBuffer);
-    float c011 = GetNormalizedDepth(get1DProbeID(probeLayout.probeCounts, id + d.yxx), DirectionToTexel(rd), depthBuffer);
-    float c100 = GetNormalizedDepth(get1DProbeID(probeLayout.probeCounts, id + d.xyy), DirectionToTexel(rd), depthBuffer);
-    float c101 = GetNormalizedDepth(get1DProbeID(probeLayout.probeCounts, id + d.xyx), DirectionToTexel(rd), depthBuffer);
-    float c110 = GetNormalizedDepth(get1DProbeID(probeLayout.probeCounts, id + d.xxy), DirectionToTexel(rd), depthBuffer);
-    float c111 = GetNormalizedDepth(get1DProbeID(probeLayout.probeCounts, id + d.xxx), DirectionToTexel(rd), depthBuffer);
+    float c000 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yyy, DirectionToUV(rd), depthTexture);
+    float c001 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yyx, DirectionToUV(rd), depthTexture);
+    float c010 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yxy, DirectionToUV(rd), depthTexture);
+    float c011 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yxx, DirectionToUV(rd), depthTexture);
+    float c100 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xyy, DirectionToUV(rd), depthTexture);
+    float c101 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xyx, DirectionToUV(rd), depthTexture);
+    float c110 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xxy, DirectionToUV(rd), depthTexture);
+    float c111 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xxx, DirectionToUV(rd), depthTexture);
 
     float c00 = lerp(c000, c001, fac.z);
     float c01 = lerp(c010, c011, fac.z);
@@ -101,7 +99,6 @@ float4 fragMain(FSInput o) : SV_Target
     float3 camPos = -mul(float3x3(viewTranspose), viewTranspose[3].xyz);
     float3 norm = normalize(o.norm);//normalize(o.worldPos); // for sphere for now, but get normals and test them soon
 
-  
     return float4(float3(SampleInterpolatedDepth(norm, o.worldPos)), 1.);
 
 }

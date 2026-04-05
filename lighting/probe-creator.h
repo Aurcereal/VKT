@@ -50,6 +50,8 @@ private:
 	ComputePipeline bakeEnvironmentProbe;
 	ComputePipeline bakeSkyboxProbe;
 
+	ComputePipeline convertDepthBufferToTexture;
+
 	ComputeDispatcher computeDispatcher;
 
 	vector<WBuffer> probePositionUBO; // shouldn't have to do vector..

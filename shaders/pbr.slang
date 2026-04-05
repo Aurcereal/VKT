@@ -1,5 +1,6 @@
 module PBR;
 import sh_sampling;
+import probe_helper;
 
 static float3 light_pos[4] = float3[](float3(-10, 10, 10),
                                       float3(10, 10, 10),

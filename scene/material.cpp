@@ -33,7 +33,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
     // Configure descriptor sets
     for (size_t i = 0; i < layouts.size(); i++) {
         vector<WDescriptorSet> ss;
-        ss.reserve(parameters.size()*3);
+        ss.reserve(parameters.size()*3); // IMPORTANT since we have pointers to vectors (why mult 3 htough?)
         vector<vk::WriteDescriptorSet> ssWriters;
         for (uint j = 0; j < parameters.size(); j++) {
             auto& param = parameters[j];
@@ -67,6 +67,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     .pBufferInfo = &std::get<vk::DescriptorBufferInfo>(ss[ss.size() - 1])
                 });
                 break;
+
             case ShaderParameter::Type::DYNAMIC_UNIFORM:
                 bufIndex = i;
                 if (param.dynamicUniform.buffers->size() < duplicationCount) {
@@ -92,6 +93,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     .pBufferInfo = &std::get<vk::DescriptorBufferInfo>(ss[ss.size() - 1])
                     });
                 break;
+
             case ShaderParameter::Type::SAMPLER:
                 ss.push_back({
                      vk::DescriptorImageInfo{
@@ -109,6 +111,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     .pImageInfo = &std::get<vk::DescriptorImageInfo>(ss[ss.size() - 1])
                 });
                 break;
+
             case ShaderParameter::Type::BUFFER:
                 ss.push_back(
                     vk::DescriptorBufferInfo{
@@ -124,6 +127,23 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     .descriptorCount = 1,
                     .descriptorType = vk::DescriptorType::eStorageBuffer,
                     .pBufferInfo = &std::get<vk::DescriptorBufferInfo>(ss[ss.size() - 1])
+                });
+                break;
+
+            case ShaderParameter::Type::STORAGE_TEXTURE:
+                ss.push_back(
+                    vk::DescriptorImageInfo{
+                        .imageView = param.storageTexture.texture->view,
+                        .imageLayout = vk::ImageLayout::eGeneral
+                    }
+                );
+                ssWriters.push_back({
+                    .dstSet = descriptorSets[i],
+                    .dstBinding = j,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = vk::DescriptorType::eStorageImage,
+                    .pImageInfo = &std::get<vk::DescriptorImageInfo>(ss[ss.size() - 1])
                 });
                 break;
             }

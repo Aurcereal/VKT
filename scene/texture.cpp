@@ -267,6 +267,20 @@ void WTexture::StaticTransitionImageLayoutHardcodedEnqueue(CommandBuffer* cmd, c
 
         srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
         dstStage = vk::PipelineStageFlagBits::eBottomOfPipe;
+    }
+    else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eGeneral) {
+        barrier.srcAccessMask = {};
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+
+        srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+        dstStage = vk::PipelineStageFlagBits::eComputeShader;
+    }
+    else if (oldLayout == vk::ImageLayout::eGeneral && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+        barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+        srcStage = vk::PipelineStageFlagBits::eComputeShader;
+        dstStage = vk::PipelineStageFlagBits::eFragmentShader; // TODO: ACCOUNT FOR COMPUTE SHADER, like just run an undefined to compute shader transition or smth or have a isCompute bool idk prolly not that big a deal either way but COULD cause an error technically
     } else {
         throw std::invalid_argument("unsupported layout transition");
     }

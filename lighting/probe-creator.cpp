@@ -127,6 +127,13 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	};
 	memcpy(probeVolume->probeLayoutUBO[0].mappedMemory, &uProbeLayout, sizeof(UProbeLayout));
 
+	// Texture
+	probeVolume->octahedralDepthMap.Create(*ref, 18 * probeCounts.x * probeCounts.y, 18 * probeCounts.z, vk::Format::eR32Sfloat, 
+		vk::ImageTiling::eOptimal, 
+		vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage,
+		vk::MemoryPropertyFlagBits::eDeviceLocal);
+	probeVolume->octahedralDepthMap.CreateSampler(*ref);
+
 	// Create Environment Probe Baker
 	vector envShaParams = {
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
@@ -157,6 +164,19 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &probeVolume->probeLayoutUBO}),
 	};
 	bakeEnvironmentProbe.Create(*ref, "shaders/spherical-harmonics-env-prog.spv", envShaParams, envMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PBakePassInfo));
+
+	// Create depth texture creator
+	vector depthTexCreatorSParams = {
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::STORAGE_TEXTURE, .visibility = vk::ShaderStageFlagBits::eCompute},
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
+	};
+	vector depthTexCreatorMParams = {
+		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->depthBuffer}),
+		ShaderParameter::MParameter(ShaderParameter::UStorageTexture{.texture = &probeVolume->octahedralDepthMap}),
+		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &probeVolume->probeLayoutUBO}),
+	};
+	convertDepthBufferToTexture.Create(*ref, "shaders/depth-buffer-to-texture.spv", depthTexCreatorSParams, depthTexCreatorMParams, uvec3(16, 16, 1));
 
 	// Bake
 	BakeEnvironmentProbes(probeCounts, transform);
@@ -212,6 +232,12 @@ void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform)
 			vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead, 
 			vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead);
 	}
+
+	// Depth Buffer -> Texture
+	probeVolume->octahedralDepthMap.TransitionImageLayoutHardcodedEnqueue(&computeDispatcher.cmd, *ref, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
+	convertDepthBufferToTexture.EnqueueDispatch(&computeDispatcher, uvec3(18 * probeCounts.x * probeCounts.y, 18 * probeCounts.z, 1));
+	probeVolume->octahedralDepthMap.TransitionImageLayoutHardcodedEnqueue(&computeDispatcher.cmd, *ref, vk::ImageLayout::eGeneral, vk::ImageLayout::eShaderReadOnlyOptimal);
+
 	computeDispatcher.FinishRecordSubmit(*ref, true);
 }
 
