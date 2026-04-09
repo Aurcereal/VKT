@@ -164,7 +164,7 @@ void main(uint3 id: SV_DispatchThreadID,
         // Do depth
         for (int thread = 0; thread < 64; thread++) {
             float4 depthSample = sharedDepthSamples[thread];
-            float3 rd = depthSample.xyz; float depth = depthSample.w;
+            float3 rd = depthSample.xyz; float depth = min(50., depthSample.w); // TODO: temp fix for massive depth inflating nearby texels
             int2 texel = int2(16)+int2(DirectionToTexel(rd));
 
             // Splat 5x5
