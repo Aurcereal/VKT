@@ -112,3 +112,20 @@ loop(bakeCount) {
     computeBarrier()
 }
 ```
+
+---
+## 4/8/2026 Update
+
+- Better probe scheduling method (a few samples from many probes each pass, fewer barriers/waits)
+- Octahedral depth map for spheres, monte carlo samples splat depths onto nearby texels
+- Large octahedral depth atlas where each 18x18 tile is dedicated to a probe.  16x16 center of each 18x18 tile stores the actual depth data, the border tile texels will never be accessed directly but are there for bilinear filtering to work correctly with octahedral mapping; going off of the 16x16 tile should loop according to the octahedron, not the 2D uv space.
+
+![](ShowcaseMedia/bufferDepth.gif)
+
+Using a buffer with depth values, no texture so no bilinear filtering.
+
+![](ShowcaseMedia/interpolatedDepth.gif)
+
+Using depth atlas for depth values, so we have bilinear filtering.  (Need to debug the borders but they're not due to incorrect octahedral looping).
+
+
