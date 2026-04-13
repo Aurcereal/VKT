@@ -18,4 +18,6 @@ private:
 	uPtr<HalfEdgeMesh> initialMesh;
 	const VulkanReferences* ref;
 	VBDSolver solver;
+
+	int frameCount = 250;
 };

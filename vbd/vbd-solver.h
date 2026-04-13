@@ -4,7 +4,7 @@
 #include "half-edge.h"
 #include <iostream>
 
-constexpr float dt = 1.0f / 48.0f; // TODO: make based on fps or an input
+// constexpr float dt = 1.0f / 48.0f; // TODO: make based on fps or an input
 
 class VBDSolver {
 public:
@@ -22,6 +22,9 @@ private:
 
 	void SimulateOneFrame();
 	vec3 PredictPosition(HVertex* vert, vec3 externalPos);
+
+	int iterCount = 5;
+	float dt = 1.0f / 24.0f;
 
 	vec3 g = vec3(0.0f, -0.98f, 0.0f);
 	float m = 1.0f;

@@ -992,7 +992,7 @@ private:
         renderPass.EnqueueDraw(cubeMesh);
 
         renderPass.EnqueueSetMaterial(vbdMaterial, currFrameIndex, { 1 });
-        int timeIndex = static_cast<int>(glm::floor(time*24)) % vbdManager.meshes.size();
+        int timeIndex = static_cast<int>(glm::floor(time*48)) % vbdManager.meshes.size();
         std::cout << "Time Index: " << timeIndex << std::endl;
         renderPass.EnqueueDraw(*vbdManager.meshes[timeIndex]);
 #endif

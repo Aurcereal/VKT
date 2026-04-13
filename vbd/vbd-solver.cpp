@@ -71,12 +71,13 @@ void VBDSolver::SimulateOneFrame() {
 		externalPredictedPositions[i] = lastSimulatedMesh->vertices[i]->pos + lastSimulatedMesh->vertices[i]->vel * dt + externalAcc * dt * dt;
 	}
 
+#ifdef SCRATCH
 	// Scratch
 	uPtr<HalfEdgeMesh> scratchMesh = mkU<HalfEdgeMesh>(*lastSimulatedMesh);
 
 	// Gaussian Seidel Iterations
 	HalfEdgeMesh *currOldMesh, *currNewMesh;
-	for (int i = 0; i < 15; i++) {
+	for (int i = 0; i < iterCount; i++) {
 		currOldMesh = i % 2 == 0 ? lastSimulatedMesh.get() : scratchMesh.get();
 		currNewMesh = i % 2 == 0 ? scratchMesh.get() : lastSimulatedMesh.get();
 
@@ -90,18 +91,19 @@ void VBDSolver::SimulateOneFrame() {
 		currNewMesh->vertices[i]->vel = (1.0f / dt) * (currNewMesh->vertices[i]->pos - oldPositions[i]);
 	}
 
-	//// Simulate
-	//for (int i = 0; i < newMesh->vertices.size(); i++) {
-	//	HVertex* v = newMesh->vertices[i].get();
-	//	/*if (v->pos.y < -2.0f) {
-	//		v->vel.y *= -1.0f;
-	//		v->pos.y = -2.0f;
-	//	}
-	//	v->vel += dt * (g - 0.05f * v->pos);
-	//	v->pos += dt * v->vel;*/
-	//	// UpdateVertex(lastSimulatedMesh->vertices[i].get(), v);
-	//}
-
 	// Copy back
 	lastSimulatedMesh = mkU<HalfEdgeMesh>(*currNewMesh); // no need to copy again
+#else
+	for (int i = 0; i < iterCount; i++) {
+		for (int i = 0; i < lastSimulatedMesh->vertices.size(); i++) {
+			HVertex* v = lastSimulatedMesh->vertices[i].get();
+			v->pos = PredictPosition(v, externalPredictedPositions[i]);
+		}
+	}
+
+	for (int i = 0; i < 15; i++) {
+		HVertex* v = lastSimulatedMesh->vertices[i].get();
+		v->vel = (1.0f / dt) * (v->pos - oldPositions[i]);
+	}
+#endif
 }
