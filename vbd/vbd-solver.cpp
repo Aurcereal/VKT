@@ -25,23 +25,35 @@ void VBDSolver::SimulateUpToFrame(uint frameIndex) {
 	}
 }
 
-constexpr vec3 g = vec3(0.0f, -0.98f, 0.0f);
+vec3 VBDSolver::PredictPosition(HVertex* vert, vec3 externalPos) {
+	if (vert->pos.y > 0.75f) return vert->pos;
 
-void UpdateVertex(HVertex* oldVert, HVertex* newVert) {
-	vec3 f = vec3(0);
+	vec3 inertiaForce = -m / (dt * dt) * (vert->pos - externalPos);
+	mat3 inertiaHessian = m / (dt*dt) * glm::identity<mat3>();
 
-	HalfEdge* currEdge = oldVert->incomingEdge;
+	vec3 neighborForce = vec3(0);
+	mat3 neighborHessian = mat3(0);
+
+	HalfEdge* currEdge = vert->incomingEdge;
 	do {
 		HVertex* neighborVert = currEdge->sym->nextVertex;
 
-		vec3 diff = oldVert->pos - neighborVert->pos;
-		f += normalize(diff) * (4.0f - length(diff));
+		vec3 d = vert->pos - neighborVert->pos;
+		float l = length(d);
+		vec3 dNormalized = normalize(d);
+		mat3 dNormalizedOuterProd = glm::outerProduct(dNormalized, dNormalized);
+
+		neighborForce += -k * (l - restLen) * dNormalized;
+		neighborHessian += k * (dNormalizedOuterProd + (1.0f / l) * (l - restLen) * (glm::identity<mat3>() - dNormalizedOuterProd));
 
 		currEdge = currEdge->next->sym;
-	} while (currEdge != oldVert->incomingEdge);
+	} while (currEdge != vert->incomingEdge);
 
-	newVert->vel += f * dt;
-	newVert->pos += newVert->vel * dt;
+	vec3 force = inertiaForce + neighborForce;
+	mat3 hessian = inertiaHessian + neighborHessian;
+
+	vec3 deltaX = glm::inverse(hessian) * force;
+	return vert->pos + deltaX;
 }
 
 void VBDSolver::SimulateOneFrame() {
@@ -50,21 +62,46 @@ void VBDSolver::SimulateOneFrame() {
 	}
 	lastSimulatedFrame++;
 
-	// Copy to new
-	uPtr<HalfEdgeMesh> newMesh = mkU<HalfEdgeMesh>(*lastSimulatedMesh);
-
-	// Simulate
-	for (int i = 0; i < newMesh->vertices.size(); i++) {
-		HVertex* v = newMesh->vertices[i].get();
-		/*if (v->pos.y < -2.0f) {
-			v->vel.y *= -1.0f;
-			v->pos.y = -2.0f;
-		}
-		v->vel += dt * (g - 0.05f * v->pos);
-		v->pos += dt * v->vel;*/
-		UpdateVertex(lastSimulatedMesh->vertices[i].get(), v);
+	// Predict external positions & save positions
+	vector<vec3> oldPositions(lastSimulatedMesh->vertices.size());
+	vector<vec3> externalPredictedPositions(lastSimulatedMesh->vertices.size());
+	for (int i = 0; i < lastSimulatedMesh->vertices.size(); i++) {
+		vec3 externalAcc = g;
+		oldPositions[i] = lastSimulatedMesh->vertices[i]->pos;
+		externalPredictedPositions[i] = lastSimulatedMesh->vertices[i]->pos + lastSimulatedMesh->vertices[i]->vel * dt + externalAcc * dt * dt;
 	}
 
+	// Scratch
+	uPtr<HalfEdgeMesh> scratchMesh = mkU<HalfEdgeMesh>(*lastSimulatedMesh);
+
+	// Gaussian Seidel Iterations
+	HalfEdgeMesh *currOldMesh, *currNewMesh;
+	for (int i = 0; i < 15; i++) {
+		currOldMesh = i % 2 == 0 ? lastSimulatedMesh.get() : scratchMesh.get();
+		currNewMesh = i % 2 == 0 ? scratchMesh.get() : lastSimulatedMesh.get();
+
+		for (int i = 0; i < scratchMesh->vertices.size(); i++) {
+			currNewMesh->vertices[i]->pos = PredictPosition(currOldMesh->vertices[i].get(), externalPredictedPositions[i]);
+		}
+	}
+
+	// Velocity update
+	for (int i = 0; i < currNewMesh->vertices.size(); i++) {
+		currNewMesh->vertices[i]->vel = (1.0f / dt) * (currNewMesh->vertices[i]->pos - oldPositions[i]);
+	}
+
+	//// Simulate
+	//for (int i = 0; i < newMesh->vertices.size(); i++) {
+	//	HVertex* v = newMesh->vertices[i].get();
+	//	/*if (v->pos.y < -2.0f) {
+	//		v->vel.y *= -1.0f;
+	//		v->pos.y = -2.0f;
+	//	}
+	//	v->vel += dt * (g - 0.05f * v->pos);
+	//	v->pos += dt * v->vel;*/
+	//	// UpdateVertex(lastSimulatedMesh->vertices[i].get(), v);
+	//}
+
 	// Copy back
-	lastSimulatedMesh = std::move(newMesh);
+	lastSimulatedMesh = mkU<HalfEdgeMesh>(*currNewMesh); // no need to copy again
 }

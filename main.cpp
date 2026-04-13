@@ -871,6 +871,7 @@ private:
         depthOrbShader.Create(coreReferences, "shaders/display-probe-depth-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), depthProbeShaderParams);
         depthOrbMaterial.Create(&depthOrbShader, coreReferences, depthProbeMaterialParams);
 #else
+        GUIManager::RegisterUIFunction(std::bind(&VBDManager::DrawUI, &vbdManager));
         vector vbdShaderParams = {
                 ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
                 ShaderParameter::SParameter{.type = ShaderParameter::Type::DYNAMIC_UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics }
