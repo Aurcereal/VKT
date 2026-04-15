@@ -35,15 +35,16 @@ public float3 TexelToDirection(uint2 texel) {
 
 public uint TexelToBufferIndices(uint probeID, uint2 texel) {
     uint texelID = texel.y * 16 + texel.x;
-    return probeID * 512 + texelID * 2; // 2 Indices: (depth, weight), will be 3 later for depth^2
+    return probeID * 256 * 3 + texelID * 3; // 3 Indices: (depth, depth^2, weight)
 }
 
-public float GetNormalizedDepth(uint probeID, uint2 texel, StructuredBuffer<float> depthBuffer) {
+public float2 GetNormalizedDepthAndSqr(uint probeID, uint2 texel, StructuredBuffer<float> depthBuffer) {
     uint ind = TexelToBufferIndices(probeID, texel);
-    return depthBuffer[ind + 0] / depthBuffer[ind + 1];
+    return float2(depthBuffer[ind + 0], depthBuffer[ind+1]) / max(1e-5, depthBuffer[ind + 2]);
 }
 
-public float GetInterpolatedDepth(uint3 probeCounts, uint3 probeID, float2 uv, Sampler2D<float> depthTexture) {
-    return depthTexture.Sample(localUVToAtlasUV(probeCounts, probeID, uv));
+public float2 GetInterpolatedDepthAndSqr(uint3 probeCounts, uint3 probeID, float2 uv, Sampler2D<float> depthTexture) {
+    float4 uvs = localUVToAtlasUVs(probeCounts, probeID, uv);
+    return float2(depthTexture.Sample(uvs.xy), depthTexture.Sample(uvs.zw));
 }
 

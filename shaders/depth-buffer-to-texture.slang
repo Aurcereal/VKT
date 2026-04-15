@@ -44,6 +44,7 @@ void main(uint3 id: SV_DispatchThreadID) {
     if ((looped.x && !looped.y) || (!looped.x && looped.y)) {
         lTexel = 15 - lTexel;
     }
-    uint bufferInd = TexelToBufferIndices(probeID, lTexel);
-    outDepthTexture[id.xy] = inDepthBuffer[bufferInd] / max(1e-5, inDepthBuffer[bufferInd + 1]);
+    float2 depths = GetNormalizedDepthAndSqr(probeID, lTexel, inDepthBuffer);
+    outDepthTexture[id.xy] = depths.x;
+    outDepthTexture[id.xy + uint2(0, probeLayout.probeCounts.z * 18)] = depths.y;
 }

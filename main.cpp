@@ -28,7 +28,7 @@
 
 #include "lighting/gi-manager.h"
 
-#define VBD
+// #define VBD
 
 #ifdef VBD
 #include "vbd/vbd-manager.h"

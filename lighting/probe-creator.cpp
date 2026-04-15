@@ -105,7 +105,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	vk::DeviceSize envShSize = sizeof(float) * 28;
 	probeVolume->shCoefficients.Create(*ref, probeCount * envShSize,
 		vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	probeVolume->depthBuffer.Create(*ref, probeCount * sizeof(float) * 16 * 16 * 2,
+	probeVolume->depthBuffer.Create(*ref, sizeof(float) * probeCount * 16 * 16 * 3,
 		vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
 	// Transform
@@ -128,7 +128,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	memcpy(probeVolume->probeLayoutUBO[0].mappedMemory, &uProbeLayout, sizeof(UProbeLayout));
 
 	// Texture
-	probeVolume->octahedralDepthMap.Create(*ref, 18 * probeCounts.x * probeCounts.y, 18 * probeCounts.z, vk::Format::eR32Sfloat, 
+	probeVolume->octahedralDepthMap.Create(*ref, 18 * probeCounts.x * probeCounts.y, 36 * probeCounts.z, vk::Format::eR32Sfloat, 
 		vk::ImageTiling::eOptimal, 
 		vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage,
 		vk::MemoryPropertyFlagBits::eDeviceLocal);

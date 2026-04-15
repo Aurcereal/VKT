@@ -72,14 +72,14 @@ float SampleInterpolatedDepth(float3 rd, float3 pos) {
     uint2 d = uint2(1, 0);
 
     float2 uv = DirectionToUV(rd);
-    float c000 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yyy, uv, depthTexture);
-    float c001 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yyx, uv, depthTexture);
-    float c010 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yxy, uv, depthTexture);
-    float c011 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yxx, uv, depthTexture);
-    float c100 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xyy, uv, depthTexture);
-    float c101 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xyx, uv, depthTexture);
-    float c110 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xxy, uv, depthTexture);
-    float c111 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xxx, uv, depthTexture);
+    float c000 = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + d.yyy, uv, depthTexture).y;
+    float c001 = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + d.yyx, uv, depthTexture).y;
+    float c010 = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + d.yxy, uv, depthTexture).y;
+    float c011 = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + d.yxx, uv, depthTexture).y;
+    float c100 = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + d.xyy, uv, depthTexture).y;
+    float c101 = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + d.xyx, uv, depthTexture).y;
+    float c110 = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + d.xxy, uv, depthTexture).y;
+    float c111 = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + d.xxx, uv, depthTexture).y;
 
     float c00 = lerp(c000, c001, fac.z);
     float c01 = lerp(c010, c011, fac.z);
@@ -91,40 +91,7 @@ float SampleInterpolatedDepth(float3 rd, float3 pos) {
 
     float c = lerp(c0, c1, fac.x);
 
-    return 0.1*GetInterpolatedDepth(probeLayout.probeCounts, uint3(round(lp)), uv, depthTexture);//c000;//c*0.1;
-}
-
-float2 bl(float3 rd, float3 pos) {
-    float3 lp = mul(probeLayout.invTransform, float4(pos, 1.)).xyz; // [0, 1] unless out of bounds
-    lp = clamp(lp, float3(0.), float3(0.99999));                    // [0, 1)
-    lp *= probeLayout.probeCounts - 1;
-
-    float3 fac = fract(lp);
-    fac = smoothstep(float3(0.0), float3(1.0), fac);
-    uint3 id = uint3(lp);
-    uint2 d = uint2(1, 0);
-
-    float2 uv = DirectionToUV(rd);
-    float c000 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yyy, uv, depthTexture);
-    float c001 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yyx, uv, depthTexture);
-    float c010 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yxy, uv, depthTexture);
-    float c011 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.yxx, uv, depthTexture);
-    float c100 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xyy, uv, depthTexture);
-    float c101 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xyx, uv, depthTexture);
-    float c110 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xxy, uv, depthTexture);
-    float c111 = GetInterpolatedDepth(probeLayout.probeCounts, id + d.xxx, uv, depthTexture);
-
-    float c00 = lerp(c000, c001, fac.z);
-    float c01 = lerp(c010, c011, fac.z);
-    float c10 = lerp(c100, c101, fac.z);
-    float c11 = lerp(c110, c111, fac.z);
-
-    float c0 = lerp(c00, c01, fac.y);
-    float c1 = lerp(c10, c11, fac.y);
-
-    float c = lerp(c0, c1, fac.x);
-
-    return uv;//localUVToAtlasUV(probeLayout.probeCounts, uint3(round(lp)), uv);
+    return 0.1 * c;//0.1*GetInterpolatedDepthAndSqr(probeLayout.probeCounts, uint3(round(lp)), uv, depthTexture).x;//c000;//c*0.1;
 }
 
 [shader("fragment")]

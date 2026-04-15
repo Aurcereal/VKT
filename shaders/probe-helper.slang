@@ -22,7 +22,7 @@ public uint tileIDToProbeID(uint3 probeCounts, uint2 tileID) {
     return get1DProbeID(probeCounts, uint3(tileID.x % probeCounts.x, tileID.x / probeCounts.x, tileID.y));
 }
 
-public float2 localUVToAtlasUV(uint3 probeCounts, uint3 probeID3, float2 uv) {
+public float4 localUVToAtlasUVs(uint3 probeCounts, uint3 probeID3, float2 uv) { // -> (depthUV, depthSqrUV)
     int2 tileID = uint2(probeCounts.x * probeID3.y + probeID3.x, probeID3.z);
 
     // 16x16 spanning square to 18x18 with gutters
@@ -30,5 +30,7 @@ public float2 localUVToAtlasUV(uint3 probeCounts, uint3 probeID3, float2 uv) {
     float2 uv18 = (1.0 + 8. + p*8.) / float2(18.0);
 
     float2 atlasUV = (float2(tileID) + uv18) / float2(probeCounts.x * probeCounts.y, probeCounts.z); // conversion
-    return atlasUV;
+
+    atlasUV.y *= .5;
+    return float4(atlasUV, atlasUV + float2(0., 0.5));
 }

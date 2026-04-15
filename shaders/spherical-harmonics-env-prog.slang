@@ -181,7 +181,8 @@ void main(uint3 id: SV_DispatchThreadID,
 
                     uint ind = TexelToBufferIndices(probeToBake, currTexel);
                     depthBuffer[ind + 0] += depth * weight;
-                    depthBuffer[ind + 1] += weight;
+                    depthBuffer[ind + 1] += depth * depth * weight;
+                    depthBuffer[ind + 2] += weight;
                 }
             }
         }
