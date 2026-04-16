@@ -775,7 +775,8 @@ private:
         // Bake Probes
         UpdateUniformBuffer(0);
         pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao,
-            uvec3(10, 5, 10), vec3(0), vec3(16.5, 10, 16.5));
+            // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
+            uvec3(40,20,30), vec3(0), vec3(16.5, 10, 16.5)); 
 
         // Objects
         vector shaderParams = {

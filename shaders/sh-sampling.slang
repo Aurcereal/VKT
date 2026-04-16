@@ -45,6 +45,8 @@ public float3 SampleSh(float3 rd, StructuredBuffer<float> shCoefficients, uint b
 #define DEBUG_OUT_OF_BOUNDS 0
 
 public float3 SampleInterpolatedSh(float3 norm, float3 pos, StructuredBuffer<float> shCoefficients, Sampler2D<float> depthTexture, ConstantBuffer<UProbeVolumeLayout> probeLayout) {
+    pos += norm * 0.3; // bias
+    
     float3 lp = mul(probeLayout.invTransform, float4(pos, 1.)).xyz; // [0, 1] unless out of bounds
     #if DEBUG_OUT_OF_BOUNDS
     bool outOfBounds = min(lp.x, min(lp.y, lp.z)) < 0. || max(lp.x, max(lp.y, lp.z)) >= 1.;
@@ -92,9 +94,9 @@ public float3 SampleInterpolatedSh(float3 norm, float3 pos, StructuredBuffer<flo
 
         // Depth
         float2 depths = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + offset, DirectionToUV(-dirToProbe), depthTexture);
-        float avgDepth = depths.x;
+        float avgDepth = depths.x+0.05;
         float avgDepthSqr = depths.y;
-        float variance = abs(avgDepthSqr - sqr(avgDepth)); // y abs
+        float variance = 0.01*abs(avgDepthSqr - sqr(avgDepth)); // y abs
         float chebyshevWeight = variance / (variance + sqr(max(distToProbe - avgDepth, 0.))); // max shouldnt be necessary?
         chebyshevWeight = max(chebyshevWeight * chebyshevWeight * chebyshevWeight, 0.);
         weight *= distToProbe <= avgDepth ? 1.0 : 0.;//chebyshevWeight;
