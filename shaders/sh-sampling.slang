@@ -90,7 +90,7 @@ public float3 SampleInterpolatedSh(float3 norm, float3 pos, StructuredBuffer<flo
 
         // Backface
         // Offset prevents going to 0 when small details that are close to backfaces need light
-        // weight *= sqr(max(1e-4, (dot(dirToProbe, norm) + 1.) * .5));// + 0.2; // From the Josa Paper TODO: proper citation
+        weight *= sqr(max(1e-4, (dot(dirToProbe, norm) + 1.) * .5)) + 0.2; // From the Josa Paper TODO: proper citation
 
         // Depth
         float2 depths = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + offset, DirectionToUV(-dirToProbe), depthTexture);
@@ -99,7 +99,7 @@ public float3 SampleInterpolatedSh(float3 norm, float3 pos, StructuredBuffer<flo
         float variance = 0.01*abs(avgDepthSqr - sqr(avgDepth)); // y abs
         float chebyshevWeight = variance / (variance + sqr(max(distToProbe - avgDepth, 0.))); // max shouldnt be necessary?
         chebyshevWeight = max(chebyshevWeight * chebyshevWeight * chebyshevWeight, 0.);
-        weight *= distToProbe <= avgDepth ? 1.0 : 0.;//chebyshevWeight;
+        weight *= distToProbe <= avgDepth ? 1.0 : chebyshevWeight;
 
         // Accumulate
         totalIrradiance += weight * sampleIrradiance;

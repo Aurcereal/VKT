@@ -142,13 +142,22 @@ Using depth atlas for depth values, so we have bilinear filtering.  (Need to deb
 
 - Also implemented depth based weighting to reject probes that are occluded (shadow mapping-like).  Used depth & depth^2 to construct a smooth falloff based on variance of a probe's depth samples.
 
-![](ShowcaseMedia/badSituationButNoLightLeak.png)
+---
 
-This image is a light leak stress test.  For earlier renders, the probes were set up in a way to avoid possible light leaks, but here, probes are set up in the worst way possible.  There are probes underneath the ceiling and right outside the walls, and the room is thin.  There's still not much light leaking though.
+| ![Alt text](ShowcaseMedia/badSituationButNoLightLeak.png) | ![](ShowcaseMedia/lightLeaks.png) |
+|:--:|:--:|
+| Depth & Backface Weighting| Without Depth & Backface Weighting |
+
+| ![Alt text](ShowcaseMedia/probesOutside.gif) |
+|:--:|
+| Probes are right outside the room, light leak prone situation (more probes than pictured) |
 
 ### Problem
 
 - Spherical Harmonics probably have a math issue somewhere still.  Things were messed up before and I did a jank fix which probably didn't actually fix it.  I think that's probably the reason for the light near the window's edge (I don't think it's interpolating from the 'wrong probes').
+- Transitions to the outside with thin rooms are still a bit weird sometimes (below image).
+
+![](ShowcaseMedia/thinWallTransition.png)
 
 ### Debugging
 
