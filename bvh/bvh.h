@@ -9,8 +9,9 @@ using namespace std;
 
 struct BVHNode {
 	vec3 lowExtent;
+	uint32_t childStartIndex;
 	vec3 highExtent;
-	uint32_t childStartIndex; uint32_t triangleCount;
+	uint32_t triangleCount;
 };
 
 struct BVH {
@@ -34,15 +35,15 @@ private:
 
 	uPtr<BVH> bvh;
 	inline BVHNode* NewNode() {
-		pBvh->push_back({});
-		return &(*pBvh)[pBvh->size() - 1];
+		bvh->bvhNodes.push_back({});
+		return &bvh->bvhNodes[bvh->bvhNodes.size() - 1];
 	}
 
 	Triangle& GetTriangle(uint32_t);
 	void SwapTriangles(uint32_t, uint32_t);
 
 	void UpdateNodeBounds(BVHNode*);
-	void ChooseSplitPlane(int* pAxis, float* pPos);
+	void ChooseSplitPlane(const BVHNode*, int* pAxis, float* pPos);
 	void Subdivide(BVHNode*);
 };
 
@@ -56,16 +57,40 @@ void BVHBuilder::SwapTriangles(uint32_t i, uint32_t j) {
 	bvh->triangleRedirection[j] = temp;
 }
 
+void BVHBuilder::ChooseSplitPlane(const BVHNode* node, int* pAxis, float* pPos) {
+	assert(node->triangleCount > 0);
+
+	int currAxis = -1;
+	float highestLength = 0.0f;
+	for (int a = 0; a < 3; a++) {
+		if (node->highExtent[a] - node->lowExtent[a] > highestLength) {
+			currAxis = a;
+			highestLength = node->highExtent[a] - node->lowExtent[a];
+		}
+	}
+
+	float avgPos = 0.0f;
+	uint32_t start = node->childStartIndex; uint32_t end = node->childStartIndex + node->triangleCount;
+	for (uint32_t i = start; i < end; i++) {
+		avgPos += GetTriangle(i).centroid[currAxis];
+	}
+	avgPos /= static_cast<float>(node->triangleCount);
+
+	*pPos = avgPos;// node->lowExtent[currAxis] + highestLength * 0.5f;
+	*pAxis = currAxis;
+}
+
 void BVHBuilder::Subdivide(BVHNode* node) {
 	// Shouldn't split?
 	if (node->triangleCount <= 2)
 		return;
 
 	// Get split plane
-	int splitAxis, float splitPos;
-	ChooseSplitPlane(&splitAxis, &splitPos);
+	int splitAxis;
+	float splitPos;
+	ChooseSplitPlane(node, &splitAxis, &splitPos);
 
-	uint32_t i = node->childStartIndex; uint32_t j = node->childStartIndex + node->triangleCount;
+	int32_t i = node->childStartIndex; int32_t j = node->childStartIndex + node->triangleCount - 1;
 
 	// Sort Triangles
 	while (i <= j) {
@@ -78,6 +103,8 @@ void BVHBuilder::Subdivide(BVHNode* node) {
 			--j;
 		}
 	}
+
+	if (i == node->childStartIndex || i == node->childStartIndex + node->triangleCount) return;
 
 	// Create children
 	BVHNode* leftNode = NewNode();
@@ -102,9 +129,13 @@ void BVHBuilder::Subdivide(BVHNode* node) {
 }
 
 void BVHBuilder::UpdateNodeBounds(BVHNode* node) {
-	assert(node->triangleCount != 0);
-	node->lowExtent = vec3(std::numeric_limits<float>::min());
-	node->highExtent = vec3(std::numeric_limits<float>::max());
+	if (node->triangleCount == 0) {
+		node->lowExtent = vec3(-1e-5);
+		node->highExtent = vec3(1e-5);
+		return;
+	}
+	node->lowExtent = vec3(std::numeric_limits<float>::max());
+	node->highExtent = vec3(std::numeric_limits<float>::min());
 	uint32_t start = node->childStartIndex; uint32_t end = node->childStartIndex + node->triangleCount;
 	for (uint32_t i = start; i<end; i++) {
 		const Triangle& t = GetTriangle(i);
@@ -118,7 +149,7 @@ void BVHBuilder::UpdateNodeBounds(BVHNode* node) {
 // TODO: reserve for pointers to work
 uPtr<BVH> BVHBuilder::BuildBVH(const std::vector<vec3>& vertices, const std::vector<uint32_t>& indices) {
 	bvh = mkU<BVH>();
-	bvh->bvhNodes.reserve(indices.size() / 3);
+	bvh->bvhNodes.reserve(static_cast<uint32_t>(glm::ceil(glm::log2(static_cast<float>(indices.size())))) * indices.size() / 3);
 	
 	// Build Triangles
 	for (int i = 0; i < indices.size(); i += 3) {
@@ -130,13 +161,14 @@ uPtr<BVH> BVHBuilder::BuildBVH(const std::vector<vec3>& vertices, const std::vec
 	}
 	bvh->triangleRedirection.reserve(triangles.size());
 	for (uint32_t i = 0; i < triangles.size(); i++) {
-		bvh->triangleRedirection[i] = i;
+		bvh->triangleRedirection.push_back(i);
 	}
 
 	// Build Root
 	BVHNode* root = NewNode();
 	root->childStartIndex = 0; root->triangleCount = triangles.size();
 	UpdateNodeBounds(root);
+	Subdivide(root);
 
 	return std::move(bvh);
 }

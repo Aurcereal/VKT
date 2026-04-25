@@ -34,6 +34,8 @@
 #include "vbd/vbd-manager.h"
 #endif
 
+#include "bvh/bvh-manager.h"
+
 using namespace std;
 using namespace vk::raii;
 using namespace glm;
@@ -42,6 +44,12 @@ constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 const string MODEL_PATH = "models/viking_room.obj";
 const string TEXTURE_PATH = "textures/viking_room.png";
+
+struct URaytracedScene {
+    mat4 model;
+    mat4 invModel;
+    mat4 invTransposeModel;
+};
 
 class Application {
 public:
@@ -113,6 +121,7 @@ private:
 
     vector<WBuffer> uniformBuffers; // Memory for each frame in flight so each frame can have diff uniform vals
     vector<WBuffer> uEntityBuffers;
+    vector<WBuffer> uRaytraceSceneBuffer; // Only needs 1 copy
 
     ShaderPipeline depthOrbShader;
 
@@ -602,7 +611,7 @@ private:
         // No staging buffer cuz we're updating this like every frame
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             uniformBuffers.emplace_back();
-            uniformBuffers.back().Create(coreReferences, sizeof(UniformBufferObject), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+            uniformBuffers.back().Create(coreReferences, sizeof(UCamera), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
             uniformBuffers.back().MapMemory();
             // Persistent mapping
 
@@ -610,6 +619,18 @@ private:
             uEntityBuffers.back().Create(coreReferences, 2 * ceilToNearest(sizeof(UEntity), coreReferences.minUniformBufferOffsetAlignment), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
             uEntityBuffers.back().MapMemory();
         }
+
+        // Raytraced Scene
+        mat4 model = game.roomTransform;
+        URaytracedScene raytracedScene = {
+            .model = model,
+            .invModel = inverse(model),
+            .invTransposeModel = inverse(transpose(model))
+        };
+        uRaytraceSceneBuffer.emplace_back();
+        uRaytraceSceneBuffer.back().Create(coreReferences, sizeof(URaytracedScene), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        uRaytraceSceneBuffer.back().MapMemory();
+        memcpy(uRaytraceSceneBuffer.back().mappedMemory, &raytracedScene, sizeof(URaytracedScene));
     }
 
     // Need to create a pool for creating descriptor sets
@@ -702,6 +723,8 @@ private:
     }
 
     ProbeCreator pc;
+    BVHManager bvhManager;
+    uPtr<BVHGPU> bvh;
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
@@ -716,6 +739,7 @@ private:
         CreateCommandBuffers();
 
         CreateSyncObjects();
+        game.Update(0, 1e-2f);
         CreateUniformBuffers();
 
         CreateDepthResources();
@@ -774,9 +798,12 @@ private:
 
         // Bake Probes
         UpdateUniformBuffer(0);
-        pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao,
+        pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &uRaytraceSceneBuffer, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao,
             // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(40,20,30), vec3(0), vec3(16.5, 10, 16.5)); 
+            uvec3(10,5,10), vec3(0), vec3(16.5, 10, 16.5)); 
+
+        // Build BVH
+        bvh = bvhManager.BuildBVH(coreReferences, testRoom);
 
         // Objects
         vector shaderParams = {
@@ -819,6 +846,49 @@ private:
         };
         shaderPipeline.Create(coreReferences, "shaders/pbr-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams);
         testMaterial.Create(&shaderPipeline, coreReferences, materialParams);
+
+        // Reflect Shader & Material
+        vector reflectShaderParams = {
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::DYNAMIC_UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+        };
+        vector reflectMaterialParams = {
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
+            ShaderParameter::MParameter(ShaderParameter::UDynamicUniform {
+                .buffers = &uEntityBuffers,
+                .singleObjectSize =
+                static_cast<vk::DeviceSize>(
+                    ceilToNearest(
+                        sizeof(UEntity),
+                        coreReferences.minUniformBufferOffsetAlignment
+                    )
+                )
+            }),
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uRaytraceSceneBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.vertexBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.indexBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->nodeBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->triangleRedirectionBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testRoomTexture}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &metallic}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &roughness}),
+            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH() })
+        };
+        reflectShader.Create(coreReferences, "shaders/reflect.spv", &swapSurfaceFormat.format, GetDepthFormat(), reflectShaderParams);
+        reflectMaterial.Create(&reflectShader, coreReferences, reflectMaterialParams);
 
         // Only different to testMaterial is white albedo
         vector blobMaterialParams = {
@@ -925,9 +995,7 @@ private:
             memcpy(static_cast<char*>(uEntityBuffers[currFrame].mappedMemory) + i * alignment, &entities[i], sizeof(UEntity));
         }
 
-        UniformBufferObject ubo = {
-            .off = time,
-            .raytraceSceneModel = glm::scale(mat4(1.0f), vec3(0.014f+0.5)) * glm::rotate(mat4(1.0f), 0*time + glm::radians(0.0f), vec3(0.0f, 1.0f, 0.0f)),
+        UCamera ubo = {
             .view = camera.GetViewMatrix(),
             .proj = camera.GetProjectionMatrix(),
         };
@@ -985,7 +1053,8 @@ private:
         renderPass.EnqueueDraw(cubeMesh);
         renderPass.EnqueueSetMaterial(testMaterial, currFrameIndex, { 0 });
         renderPass.EnqueueDraw(testRoom);
-        renderPass.EnqueueSetMaterial(blobMaterial, currFrameIndex, { 1 });
+        //renderPass.EnqueueSetMaterial(blobMaterial, currFrameIndex, { 1 });
+        renderPass.EnqueueSetMaterial(reflectMaterial, currFrameIndex, { 1 });
         renderPass.EnqueueDraw(blobMesh);
 
         if (showDebugProbes) {

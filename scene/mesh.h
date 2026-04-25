@@ -55,6 +55,9 @@ public:
     WBuffer indexBuffer;
     uint32_t indexCount;
 
+    void GetPositions(vector<vec3>*) const;
+    const vector<uint32_t>& GetIndices() const;
+
 private:
     void CreateBuffers(const VulkanReferences&);
     void LoadModel(const std::string& path);

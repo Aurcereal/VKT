@@ -24,11 +24,16 @@ private:
 	int duplicationCount = -1;
 };
 
-struct UniformBufferObject {
-	alignas(4) float off;
-	alignas(16) mat4 raytraceSceneModel; // TODO: remove
-	alignas(16) mat4 view;
-	alignas(16) mat4 proj;
+//struct UniformBufferObject {
+//	alignas(4) float off;
+//	alignas(16) mat4 raytraceSceneModel; // TODO: remove
+//	alignas(16) mat4 view;
+//	alignas(16) mat4 proj;
+//};
+
+struct UCamera {
+	mat4 view;
+	mat4 proj;
 };
 
 struct UEntity {

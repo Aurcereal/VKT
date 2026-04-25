@@ -1,20 +1,22 @@
 import Raytracing;
 import PBR;
 import sh_sampling;
+import bvh_traversal; // TODO: dedicated struct modules
+import misc_structs;
 
-struct UniformBuffer {
-    float off;
-    float4x4 model;
-    float4x4 view;
-    float4x4 proj;
+ConstantBuffer<UCamera> ubo;
+struct UEntity {
+    float4x4 transform;
 };
-
-ConstantBuffer<UniformBuffer> ubo;
+ConstantBuffer<UEntity> uTransform;
+ConstantBuffer<URaytracedScene> uRaytracedScene;
 
 SamplerCube skybox;
 
 StructuredBuffer<Vertex> worldVertices;
 StructuredBuffer<uint32_t> worldIndices;
+StructuredBuffer<BVHNode> bvhNodes;
+StructuredBuffer<uint32_t> triangleRedirection;
 Sampler2D worldTex;
 Sampler2D worldMetal;
 Sampler2D worldRoughness;
@@ -37,17 +39,16 @@ struct VSOutput {
     float3 norm;
 };
 
-
 [shader("vertex")]
 VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
     VSOutput vOut;
     float3 objPos = vIn.position;
-    float4 worldPos = mul(ubo.model, float4(objPos, 1.0));
+    float4 worldPos = mul(uTransform.transform, float4(objPos, 1.0));
     vOut.worldPos = worldPos.xyz;
     vOut.position = mul(ubo.proj, mul(ubo.view, worldPos));
     vOut.color = vIn.color;
     vOut.uv = vIn.uv;
-    vOut.norm = mul(ubo.model, float4(vIn.norm, 0.0)).xyz; // TODO: make do opposite scale (inv trans)
+    vOut.norm = mul(uTransform.transform, float4(vIn.norm, 0.0)).xyz; // TODO: make do opposite scale (inv trans)
     return vOut;
 }
 
@@ -64,10 +65,16 @@ float4 fragMain(VSOutput o) : SV_Target
     float3 sta = o.worldPos + norm * 0.01;
     float3 reflRay = normalize(reflect(o.worldPos - camPos, norm));
 
-    float3 Lo = SampleEnvironment(sta, reflRay,
-                                  ubo.model, worldVertices, worldIndices, worldTex, worldMetal, worldRoughness, worldAO, skyboxSh, skybox).xyz;
+    // float3 Lo = SampleEnvironment(sta, reflRay, uRaytracedScene.model, worldVertices, worldIndices, worldTex, worldMetal, worldRoughness, worldAO, skyboxSh, skybox).xyz;
+    BVHMesh bvh;
+    bvh.indices = worldIndices;
+    bvh.vertices = worldVertices;
+    bvh.triangleRedirection = triangleRedirection;
+    bvh.nodes = bvhNodes;
+    
+    float3 Lo = SampleEnvironmentBVH(sta, reflRay, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, worldTex, worldMetal, worldRoughness, worldAO, skyboxSh, skybox).xyz;
     float3 col = gammaCorrect(reinhardOp(Lo));
 
-    return float4(SampleSh(norm, skyboxSh, 0), 1.);//float4(col, 1.);
+    return float4(col, 1.0);//float4(SampleSh(norm, skyboxSh, 0), 1.);//float4(col, 1.);
 
 }

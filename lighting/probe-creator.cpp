@@ -63,8 +63,13 @@ struct PBakePassInfo {
 	alignas(4) uint32_t currBake;
 };
 
+WBuffer* ProbeCreator::GetSkyboxSH() {
+	assert(isSkyboxBaked);
+	return skyboxSh.get();
+}
+
 // TODO: all these params def annoying so not having it, need to have some struct to represent the world
-void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<WBuffer>* uniformBuffers, WTexture* testCubeMap, Mesh* testRoom, WTexture* testRoomTexture, WTexture* metallic, WTexture* roughness, WTexture* ao,
+void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<WBuffer>* uniformBuffers, vector<WBuffer>* uRaytracedSceneBuffer, WTexture* testCubeMap, Mesh* testRoom, WTexture* testRoomTexture, WTexture* metallic, WTexture* roughness, WTexture* ao,
 	uvec3 probeCounts, vec3 boundingBoxOrigin, vec3 boundingBoxSize) {
 	this->ref = ref;
 
@@ -137,6 +142,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	// Create Environment Probe Baker
 	vector envShaParams = {
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
@@ -151,6 +157,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	};
 	vector envMatParams = {
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uniformBuffers}),
+		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uRaytracedSceneBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::USampler {.texture = testCubeMap}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom->vertexBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom->indexBuffer}),

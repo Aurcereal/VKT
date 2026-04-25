@@ -12,3 +12,9 @@ public float4x4 rotY(float o) {
 public float sqr(float x) {
     return x * x;
 }
+
+public void Swap<T>(inout T v1, inout T v2) {
+    T temp = v1;
+    v1 = v2;
+    v2 = temp;
+}

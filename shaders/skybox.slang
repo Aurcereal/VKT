@@ -1,12 +1,7 @@
 import Raytracing;
+import misc_structs;
 
-struct UniformBuffer {
-    float off;
-    float4x4 model;
-    float4x4 view;
-    float4x4 proj;
-};
-ConstantBuffer<UniformBuffer> ubo;
+ConstantBuffer<UCamera> ubo;
 
 struct VSInput {
     float3 position;

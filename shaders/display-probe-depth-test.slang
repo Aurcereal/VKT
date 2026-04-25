@@ -4,19 +4,13 @@ import sh_sampling;
 import probe_visibility;
 import probe_helper;
 import math_helper;
-
-struct UniformBuffer {
-    float off;
-    float4x4 model;
-    float4x4 view;
-    float4x4 proj;
-};
+import misc_structs;
 
 struct UEntity {
     float4x4 transform;
 };
 
-ConstantBuffer<UniformBuffer> ubo;
+ConstantBuffer<UCamera> ubo;
 ConstantBuffer<UEntity> uTransform;
 ConstantBuffer<UProbeVolumeLayout> probeLayout;
 StructuredBuffer<float> depthBuffer;

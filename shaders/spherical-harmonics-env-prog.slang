@@ -1,18 +1,13 @@
 import Raytracing;
 import probe_visibility;
 import probe_helper;
+import misc_structs;
 
 groupshared float3[64][9] sharedCoefficients;
 groupshared float4[64] sharedDepthSamples;
 
-struct UniformBuffer {
-    float off;
-    float4x4 model;
-    float4x4 view;
-    float4x4 proj;
-};
-
-ConstantBuffer<UniformBuffer> ubo;
+ConstantBuffer<UCamera> ubo;
+ConstantBuffer<URaytracedScene> uRaytracedScene;
 SamplerCube skybox;
 StructuredBuffer<Vertex> worldVertices;
 StructuredBuffer<uint32_t> worldIndices;
@@ -100,7 +95,7 @@ void main(uint3 id: SV_DispatchThreadID,
 
     // Sample Li & Rd
     float3 rd = uniformSphere(float2(rngi(id.x - id.y + 525 + pushConstants.currGroup*23 - pushConstants.currBake*7), rngi(id.x + id.y + 525 - pushConstants.currGroup*15 + pushConstants.currBake*9)));
-    float4 samp = SampleEnvironment(probePos, rd, ubo.model, worldVertices, worldIndices, worldTex, worldMetal, worldRoughness, worldAO, skySh, skybox);
+    float4 samp = SampleEnvironment(probePos, rd, uRaytracedScene.model, worldVertices, worldIndices, worldTex, worldMetal, worldRoughness, worldAO, skySh, skybox);
     float3 li = samp.xyz;
     float depth = samp.w;
 

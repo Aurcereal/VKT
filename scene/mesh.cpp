@@ -28,6 +28,17 @@ void Mesh::CreateFromArrays(const VulkanReferences& ref, const vector<vec3>& pos
     CreateBuffers(ref);
 }
 
+void Mesh::GetPositions(vector<vec3>* pPositions) const {   
+    pPositions->clear();
+    for (const auto& v : vertices) {
+        pPositions->push_back(v.pos);
+    }
+}
+
+const vector<uint32_t>& Mesh::GetIndices() const {
+    return indices;
+}
+
 void Mesh::CreateBuffers(const VulkanReferences& ref) {
     vk::DeviceSize vertexBufferSize = sizeof(Vertex) * vertices.size();
 
