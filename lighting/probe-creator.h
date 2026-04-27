@@ -8,6 +8,7 @@
 #include "scene/material.h"
 #include "core/memory-helper.h"
 #include "scene/render-pass.h"
+#include "bvh/bvh-manager.h"
 
 using namespace glm;
 
@@ -29,7 +30,7 @@ struct ProbeVolume {
 
 class ProbeCreator {
 public:
-	void Create(const VulkanReferences*, WTexture* skybox, vector<WBuffer>* uniformBuffers, vector<WBuffer>* uRaytracedSceneBuffer, WTexture* testCubeMap, Mesh* testRoom, WTexture* testRoomTexture, WTexture* metallic, WTexture* roughness, WTexture* ao,
+	void Create(const VulkanReferences*, WTexture* skybox, vector<WBuffer>* uniformBuffers, vector<WBuffer>* uRaytracedSceneBuffer, WTexture* testCubeMap, Mesh* testRoom, WTexture* testRoomTexture, WTexture* metallic, WTexture* roughness, WTexture* ao, const BVHGPU*,
 		uvec3 probeCounts, vec3 boundingBoxOrigin, vec3 boundingBoxSize);
 	uPtr<ProbeVolume> probeVolume;
 	

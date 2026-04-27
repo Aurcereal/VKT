@@ -796,14 +796,19 @@ private:
         GUIManager::RegisterUIFunction(std::bind(&Application::DebugUI, this));
         GUIManager::RegisterUIFunction(std::bind(&TestGame::DrawUI, &game));
 
-        // Bake Probes
-        UpdateUniformBuffer(0);
-        pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &uRaytraceSceneBuffer, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao,
-            // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(10,5,10), vec3(0), vec3(16.5, 10, 16.5)); 
-
         // Build BVH
         bvh = bvhManager.BuildBVH(coreReferences, testRoom);
+
+        // Bake Probes
+        UpdateUniformBuffer(0);
+        auto beforeProbeCreateTime = std::chrono::high_resolution_clock::now();
+        pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &uRaytraceSceneBuffer, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao, bvh.get(),
+            // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
+            uvec3(40,20,40), vec3(0), vec3(16.5, 10, 16.5)); 
+        auto afterProbeCreateTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(afterProbeCreateTime - beforeProbeCreateTime);
+
+        std::cout << "Probe Creation Time: " << static_cast<float>(duration.count()) * 1e-6 << std::endl;
 
         // Objects
         vector shaderParams = {

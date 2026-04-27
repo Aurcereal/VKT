@@ -81,8 +81,7 @@ public float4 SampleEnvironmentBVH(float3 ro, float3 rd,
     ) {
     float3 lro = mul(invModel, float4(ro, 1.)).xyz;
     float3 lrd = mul(invModel, float4(rd, 0.)).xyz;
-    float checkCount;
-    Intersection inter = RayIntersectBVH(lro, lrd, bvhMesh, checkCount);
+    Intersection inter = RayIntersectBVH(lro, lrd, bvhMesh);
     if (inter.t < 1e4) {
         float3 lHitPnt = lro + lrd * inter.t;
 
@@ -110,7 +109,7 @@ public float4 SampleEnvironmentBVH(float3 ro, float3 rd,
         float metallic = 0.;   // worldMetal.Sample(hitUv).r;
         float roughness = 0.2; // worldRoughness.Sample(hitUv).r;
         float ao = 0.;         // worldAO.Sample(hitUv).r;
-        return float4(checkCount/1500., SamplePBRSky(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, skyboxSh).gb, inter.t);
+        return float4(SamplePBRSky(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, skyboxSh).rgb, inter.t);
     } else {
         return float4(SampleSkybox(rd, skybox), 1e4);
     }

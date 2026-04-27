@@ -2,6 +2,7 @@ import Raytracing;
 import probe_visibility;
 import probe_helper;
 import misc_structs;
+import bvh_traversal;
 
 groupshared float3[64][9] sharedCoefficients;
 groupshared float4[64] sharedDepthSamples;
@@ -11,6 +12,8 @@ ConstantBuffer<URaytracedScene> uRaytracedScene;
 SamplerCube skybox;
 StructuredBuffer<Vertex> worldVertices;
 StructuredBuffer<uint32_t> worldIndices;
+StructuredBuffer<uint32_t> triangleRedirection;
+StructuredBuffer<BVHNode> bvhNodes;
 Sampler2D worldTex;
 Sampler2D worldMetal;
 Sampler2D worldRoughness;
@@ -94,8 +97,14 @@ void main(uint3 id: SV_DispatchThreadID,
     float3 probePos = probeIDToPos(probeToBake);
 
     // Sample Li & Rd
-    float3 rd = uniformSphere(float2(rngi(id.x - id.y + 525 + pushConstants.currGroup*23 - pushConstants.currBake*7), rngi(id.x + id.y + 525 - pushConstants.currGroup*15 + pushConstants.currBake*9)));
-    float4 samp = SampleEnvironment(probePos, rd, uRaytracedScene.model, worldVertices, worldIndices, worldTex, worldMetal, worldRoughness, worldAO, skySh, skybox);
+    BVHMesh bvh;
+    bvh.indices = worldIndices;
+    bvh.vertices = worldVertices;
+    bvh.triangleRedirection = triangleRedirection;
+    bvh.nodes = bvhNodes;
+
+    float3 rd = uniformSphere(float2(rngi(id.x - id.y + 525 + pushConstants.currGroup * 23 - pushConstants.currBake * 7), rngi(id.x + id.y + 525 - pushConstants.currGroup * 15 + pushConstants.currBake * 9)));
+    float4 samp = SampleEnvironmentBVH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, worldTex, worldMetal, worldRoughness, worldAO, skySh, skybox);
     float3 li = samp.xyz;
     float depth = samp.w;
 

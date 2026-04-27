@@ -31,7 +31,7 @@ namespace ShaderParameter {
 	};
 
 	struct UBuffer {
-		WBuffer* buffer;
+		const WBuffer* buffer;
 	};
 
 	struct UStorageTexture {

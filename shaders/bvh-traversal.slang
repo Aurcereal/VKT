@@ -32,7 +32,7 @@ inline void GetTriangle(BVHMesh bvhMesh, uint32_t bvhTriIndex, out float3 v0, ou
 }
 
 // TODO: can try with an index traversal stack too, but sizeof(BVHNode) is so small rn
-public Intersection RayIntersectBVH(float3 ro, float3 rd, BVHMesh bvh, out float checkCount) {
+public Intersection RayIntersectBVH(float3 ro, float3 rd, BVHMesh bvh) {
     BVHNode traversalStack[64];
     uint stackPtr = 0;
     BVHNode currNode = bvh.nodes[0];
@@ -41,14 +41,11 @@ public Intersection RayIntersectBVH(float3 ro, float3 rd, BVHMesh bvh, out float
     inter.t = 1e4;
     inter.triangleIndex = 0;
 
-    checkCount = 0.;
-
     bool finished = false;
     while (!finished) {
         if (currNode.triangleCount > 0) {
             // Is Leaf
             uint32_t start = currNode.childStartIndex; uint32_t end = start + currNode.triangleCount;
-            checkCount += float(end - start);
             for (uint32_t i = start; i < end; ++i) {
                 // Intersect triangles
                 float3 v0, v1, v2;
