@@ -59,6 +59,7 @@ StructuredBuffer<uint32_t> indices;
 
 SamplerCube skybox;
 StructuredBuffer<float> shCoefficients;
+StructuredBuffer<float> skySh;
 [[vk::image_format("r32f")]] Sampler2D<float> depthTexture;
 ConstantBuffer<UProbeVolumeLayout> probeLayout;
 

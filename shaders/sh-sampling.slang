@@ -13,7 +13,7 @@ uint probeIDToOffset(uint3 probeCounts, uint3 id) {
 // TODO: potentially put skybox SH into cubemap since it's one of a kind and is used a lot
 public float3 SampleSh(float3 rd, StructuredBuffer<float> shCoefficients, uint bufferOffset) {
 
-    // rd = normalize(rd);
+    rd = normalize(rd);
     float cosCo1 = 1.; // PI;
     float cosCo2 = 1.; //(2. / 3.) * PI;
     float cosCo3 = 1.; // PI * .25;
@@ -31,15 +31,15 @@ public float3 SampleSh(float3 rd, StructuredBuffer<float> shCoefficients, uint b
     float3 c9 = mult * cosCo3 * float3(shCoefficients[24 + bufferOffset], shCoefficients[25 + bufferOffset], shCoefficients[26 + bufferOffset]);
 
     return 
-        c1 * 0.28209479 +
-        c2 * 0.4886025119029199 * rd.y +
-        c3 * 0.4886025119029199 * rd.z +
-        c4 * 0.4886025119029199 * rd.x +
-        c5 * 1.0925484305920792 * rd.x * rd.y +
-        c6 * 1.0925484305920792 * rd.y * rd.z +
-        c7 * 0.31539156525252005 * (3 * rd.z * rd.z - 1) +
-        c8 * 1.0925484305920792 * rd.x * rd.z +
-        c9 * 0.5462742152960396 * (rd.x * rd.x - rd.y * rd.y);
+        c1 +
+        c2 * rd.y +
+        c3 * rd.z +
+        c4 * rd.x +
+        c5 * rd.x * rd.y +
+        c6 * rd.y * rd.z +
+        c7 * (3. * rd.z * rd.z - 1.) + //(1. * rd.z * rd.z + 1.) +
+        c8 * rd.x * rd.z +
+        c9 * (rd.x * rd.x - rd.y * rd.y);
 }
 
 #define DEBUG_OUT_OF_BOUNDS 0

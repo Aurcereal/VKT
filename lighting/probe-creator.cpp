@@ -203,13 +203,17 @@ void ProbeCreator::AccumulateScratchIntoBuffer(WBuffer* buf, vk::DeviceSize dstO
 	vector<float> sh(27, 0.0f);
 	float* data = (float*)receiveBuffer.MapMemory();
 	for (int i = 0; i < SCRATCH_BUFFER_SIZE / sizeof(float); i++) {
-		sh[i % 27] += data[i];
+		/*if (i % 27 <= 2)*/ sh[i % 27] += data[i];
 	}
 	receiveBuffer.UnmapMemory();
 
 	// Divide by monte carlo count
 	for (int i = 0; i < 27; i++) {
-		sh[i] /= (1.0f * SQRT_THREADS_PER_PASS * SQRT_THREADS_PER_PASS);
+		sh[i] /= ((1.0f*SCRATCH_BUFFER_SIZE) / (1.0f*sizeof(float)) / 27.0f);// (1.0f * SQRT_THREADS_PER_PASS * SQRT_THREADS_PER_PASS);
+	}
+
+	for (int i = 0; i < 27; i++) {
+		std::cout << i << ": " << sh[i] << std::endl;
 	}
 
 	// Create return buffer

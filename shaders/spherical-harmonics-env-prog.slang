@@ -109,27 +109,28 @@ void main(uint3 id: SV_DispatchThreadID,
     float depth = samp.w;
 
     // Updated shared depth sample
+    rd = normalize(rd);
     sharedDepthSamples[threadIDWithinGroup] = float4(rd, depth);
 
     // Updated shared sh
     float cosCo1 = PI;
     float cosCo2 = (2. / 3.) * PI;
     float cosCo3 = PI * .25;
-    cosCo1 *= cosCo1;
-    cosCo2 *= cosCo2;
-    cosCo3 *= cosCo3;
+    // cosCo1 *= cosCo1;
+    // cosCo2 *= cosCo2;
+    // cosCo3 *= cosCo3;
 
-    sharedCoefficients[threadIDWithinGroup][0] = 0.28209479 * li * cosCo1;
+    sharedCoefficients[threadIDWithinGroup][0] = 0.28209479 * 0.28209479 * li * cosCo1;
 
-    sharedCoefficients[threadIDWithinGroup][1] = 0.4886025119029199 * rd.y * li * cosCo2;
-    sharedCoefficients[threadIDWithinGroup][2] = 0.4886025119029199 * rd.z * li * cosCo2;
-    sharedCoefficients[threadIDWithinGroup][3] = 0.4886025119029199 * rd.x * li * cosCo2;
+    sharedCoefficients[threadIDWithinGroup][1] = 0.4886025119029199 * 0.4886025119029199 * rd.y * li * cosCo2;
+    sharedCoefficients[threadIDWithinGroup][2] = 0.4886025119029199 * 0.4886025119029199 * rd.z * li * cosCo2;
+    sharedCoefficients[threadIDWithinGroup][3] = 0.4886025119029199 * 0.4886025119029199 * rd.x * li * cosCo2;
 
-    sharedCoefficients[threadIDWithinGroup][4] = 1.0925484305920792 * rd.x * rd.y * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][5] = 1.0925484305920792 * rd.y * rd.z * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][6] = 0.31539156525252005 * (3. * rd.z * rd.z - 1.) * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][7] = 1.0925484305920792 * rd.x * rd.z * li;
-    sharedCoefficients[threadIDWithinGroup][8] = 0.5462742152960396 * (rd.x * rd.x - rd.y * rd.y) * li * cosCo3;
+    sharedCoefficients[threadIDWithinGroup][4] = 1.0925484305920792 * 1.0925484305920792 * rd.x * rd.y * li * cosCo3;
+    sharedCoefficients[threadIDWithinGroup][5] = 1.0925484305920792 * 1.0925484305920792 * rd.y * rd.z * li * cosCo3;
+    sharedCoefficients[threadIDWithinGroup][6] = 0.31539156525252005 * 0.31539156525252005 * (3. * rd.z * rd.z - 1.) * li * cosCo3;
+    sharedCoefficients[threadIDWithinGroup][7] = 1.0925484305920792 * 1.0925484305920792 * rd.x * rd.z * li * cosCo3;
+    sharedCoefficients[threadIDWithinGroup][8] = 0.5462742152960396 * 0.5462742152960396 * (rd.x * rd.x - rd.y * rd.y) * li * cosCo3;
 
     // Wait til all threads in group are done
     GroupMemoryBarrierWithGroupSync();

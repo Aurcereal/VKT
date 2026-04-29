@@ -804,7 +804,7 @@ private:
         auto beforeProbeCreateTime = std::chrono::high_resolution_clock::now();
         pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &uRaytraceSceneBuffer, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao, bvh.get(),
             // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(40,20,40), vec3(0), vec3(16.5, 10, 16.5)); 
+            uvec3(40, 20, 40), vec3(0), vec3(16.5, 10, 16.5));
         auto afterProbeCreateTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(afterProbeCreateTime - beforeProbeCreateTime);
 
@@ -821,6 +821,7 @@ private:
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eFragment },
@@ -846,6 +847,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.indexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),// &writtenCubemap }),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->shCoefficients}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
@@ -916,6 +918,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.indexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->shCoefficients}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
@@ -1063,7 +1066,7 @@ private:
         renderPass.EnqueueDraw(blobMesh);
 
         if (showDebugProbes) {
-            pc.probeVolume->DrawDebugProbeVolume(&renderPass, sphereMesh, depthOrbMaterial, currFrameIndex);
+            pc.probeVolume->DrawDebugProbeVolume(&renderPass, sphereMesh, probeOrbMaterial, currFrameIndex);
         }
 #else
         renderPass.EnqueueSetMaterial(skyboxMaterial, currFrameIndex);
