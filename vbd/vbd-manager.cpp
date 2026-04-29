@@ -38,7 +38,7 @@ void VBDManager::DrawUI() {
 	ImGui::SliderInt("Frame Count", &frameCount, 5, 1000);
 	ImGui::SliderInt("Iteration Count", &solver.iterCount, 1, 40);
 	int fps = static_cast<int>(glm::ceil(1.0f / solver.dt));
-	if (ImGui::SliderInt("Sim FPS", &fps, 1, 48)) {
+	if (ImGui::SliderInt("Sim FPS", &fps, 1, 120)) {
 		solver.dt = 1.0f / (1.0f * fps);
 	}
 	ImGui::SliderFloat("Mass", &solver.m, 0.05f, 10.0f, "%.2f");

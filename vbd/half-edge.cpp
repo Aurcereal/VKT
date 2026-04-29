@@ -2,6 +2,8 @@
 #include <iostream>
 #include <fstream>
 
+using namespace std;
+
 HalfEdgeMesh::HalfEdgeMesh(const HalfEdgeMesh& other) {
     this->pointCountBound = other.pointCountBound;
 

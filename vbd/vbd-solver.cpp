@@ -1,7 +1,35 @@
+//#include "Eigen/Eigen"
+//#include "igl/AABB.h"
+//#include "igl/signed_distance.h"
+//
+//void test() {
+//	Eigen::MatrixXf vertices; // Vx3
+//	Eigen::MatrixXi indices; // Fx3
+//
+//	// TODO: mesh function helper that fills up matrices (or returns new ones)
+//
+//	// have a function return the vertices/indices, or use a pointer to fill it up with the <<, not sure how Xf/Xi works
+//
+//	igl::AABB<Eigen::MatrixXf, 3> meshTree;
+//	meshTree.init(vertices, indices);
+//
+//	Eigen::RowVector3f query;
+//	query << 1.0f, 2.0f, 3.0f;
+//
+//	int faceID; Eigen::RowVector3f closestPnt; float sqrDistance;
+//	// igl::signed_distance(query, vertices, indices, SIGNED_DISTANCE_TYPE_PSEUDONORMAL, )
+//	sqrDistance = meshTree.squared_distance(vertices, indices, query, faceID, closestPnt);
+//}
+
+
 #include "vbd-solver.h"
 #include "helper/math.h"
 
 VBDSolver::VBDSolver() : startPoseMesh(nullptr), lastSimulatedMesh(nullptr), lastSimulatedFrame(0) {}
+
+bool IsConstrained(HVertex* vert) {
+	return abs(vert->pos.x) >= 0.97 && vert->pos.y > -0.01;//vert->pos.y > 0.75f;
+}
 
 void VBDSolver::ResetSimulation(uPtr<HalfEdgeMesh> newStartPoseMesh) {
 	if (newStartPoseMesh != nullptr) {
@@ -13,6 +41,11 @@ void VBDSolver::ResetSimulation(uPtr<HalfEdgeMesh> newStartPoseMesh) {
 
 	lastSimulatedFrame = 0;
 	lastSimulatedMesh = mkU<HalfEdgeMesh>(*startPoseMesh); // Copy
+	constrainedVerts.clear();
+	for (const uPtr<HVertex>& v : lastSimulatedMesh->vertices) {
+		if (IsConstrained(v.get()))
+			constrainedVerts.insert(v->id);
+	}
 
 	// TODO: make triangulated/assume triangulated
 	ComputeFaceInfo();
@@ -29,12 +62,8 @@ void VBDSolver::SimulateUpToFrame(uint frameIndex) {
 	}
 }
 
-bool IsConstrained(HVertex* vert) {
-	return abs(vert->pos.x) >= 0.97 && vert->pos.y > -0.01;//vert->pos.y > 0.75f;
-}
-
 vec3 VBDSolver::PredictPosition(HVertex* vert, vec3 externalPos) {
-	if (IsConstrained(vert)) return vert->pos;
+	if (constrainedVerts.count(vert->id) != 0) return vert->pos;
 
 	vec3 inertiaForce = -m / (dt * dt) * (vert->pos - externalPos);
 	mat3 inertiaHessian = m / (dt*dt) * glm::identity<mat3>();
@@ -65,7 +94,7 @@ vec3 VBDSolver::PredictPosition(HVertex* vert, vec3 externalPos) {
 }
 
 vec3 VBDSolver::PredictPositionCloth(const HalfEdgeMesh& mesh, HVertex* vert, vec3 externalPos) {
-	if (IsConstrained(vert)) return vert->pos;
+	if (constrainedVerts.count(vert->id) != 0) return vert->pos;
 
 	vec3 inertiaForce = -m / (dt * dt) * (vert->pos - externalPos);
 	mat3 inertiaHessian = m / (dt * dt) * glm::identity<mat3>();
@@ -85,8 +114,10 @@ vec3 VBDSolver::PredictPositionCloth(const HalfEdgeMesh& mesh, HVertex* vert, ve
 
 	vec3 force = inertiaForce + neighborForce;
 	mat3 hessian = inertiaHessian + neighborHessian;
+	// if (dot(force, force) <= 0.1f) return vert->pos;
 
 	vec3 deltaX = glm::inverse(hessian) * force;
+	// if (dot(deltaX, deltaX) >= 2.0f) return vert->pos;
 	return vert->pos + deltaX;
 }
 
@@ -280,6 +311,7 @@ void VBDSolver::SimulateOneFrame() {
 	for (int i = 0; i < lastSimulatedMesh->vertices.size(); i++) {
 		HVertex* v = lastSimulatedMesh->vertices[i].get();
 		v->vel = (1.0f / dt) * (v->pos - oldPositions[i]);
+		v->pos = oldPositions[i] + 0.98f * v->vel * dt; // DAMPING
 	}
 #endif
 }

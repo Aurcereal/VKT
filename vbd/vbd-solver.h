@@ -3,6 +3,7 @@
 #include "defines.h"
 #include "half-edge.h"
 #include <iostream>
+#include <unordered_set>
 
 typedef int PhysicsMaterialID;
 #define SIMPLE_SPRING 0
@@ -26,6 +27,7 @@ private:
 	friend class VBDManager;
 
 	uPtr<HalfEdgeMesh> startPoseMesh;
+	std::unordered_set<int> constrainedVerts;
 	int lastSimulatedFrame;
 
 	void SimulateOneFrame();

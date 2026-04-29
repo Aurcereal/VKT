@@ -3,7 +3,6 @@
 #include "defines.h"
 #include "scene/mesh.h"
 
-using namespace std;
 using namespace glm;
 
 struct HVertex;
