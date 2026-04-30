@@ -1,27 +1,3 @@
-//#include "Eigen/Eigen"
-//#include "igl/AABB.h"
-//#include "igl/signed_distance.h"
-//
-//void test() {
-//	Eigen::MatrixXf vertices; // Vx3
-//	Eigen::MatrixXi indices; // Fx3
-//
-//	// TODO: mesh function helper that fills up matrices (or returns new ones)
-//
-//	// have a function return the vertices/indices, or use a pointer to fill it up with the <<, not sure how Xf/Xi works
-//
-//	igl::AABB<Eigen::MatrixXf, 3> meshTree;
-//	meshTree.init(vertices, indices);
-//
-//	Eigen::RowVector3f query;
-//	query << 1.0f, 2.0f, 3.0f;
-//
-//	int faceID; Eigen::RowVector3f closestPnt; float sqrDistance;
-//	// igl::signed_distance(query, vertices, indices, SIGNED_DISTANCE_TYPE_PSEUDONORMAL, )
-//	sqrDistance = meshTree.squared_distance(vertices, indices, query, faceID, closestPnt);
-//}
-
-
 #include "vbd-solver.h"
 #include "helper/math.h"
 

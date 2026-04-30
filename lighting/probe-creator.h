@@ -66,3 +66,5 @@ constexpr uint32_t SQRT_THREADS_PER_GROUP = (8);
 
 constexpr uint32_t GROUP_SIZE = (SQRT_THREADS_PER_PASS / SQRT_THREADS_PER_GROUP) * (SQRT_THREADS_PER_PASS / SQRT_THREADS_PER_GROUP);
 constexpr vk::DeviceSize SCRATCH_BUFFER_SIZE = (GROUP_SIZE * sizeof(float) * 3 * 9);
+
+constexpr uint skyboxBakeCount = 4;

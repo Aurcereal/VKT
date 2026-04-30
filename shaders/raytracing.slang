@@ -10,7 +10,7 @@ public struct URaytracedScene {
 }
 
 public float3 SampleSkybox(float3 rd, SamplerCube skybox) {
-    return 2.5 * float3(0.4, 0.5, 1.0) * pow(max(0., dot(rd, float3(1., 1., 0.)/sqrt(2.))), 16.);//10. * skybox.Sample(rd).rgb;//10. * skybox.Sample(rd).rgb; // pow(skybox.Sample(rd).rgb,float3(2.2));  ;/
+    return 25. * float3(0.4, 0.5, 1.0) * pow(max(0., dot(rd, float3(1., 1., 0.)/sqrt(2.))), 64.);//10. * skybox.Sample(rd).rgb;//10. * skybox.Sample(rd).rgb; // pow(skybox.Sample(rd).rgb,float3(2.2));  ;/
 }
 
 public float4 SampleEnvironment(float3 ro, float3 rd,

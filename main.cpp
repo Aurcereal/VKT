@@ -28,7 +28,7 @@
 
 #include "lighting/gi-manager.h"
 
-#define VBD
+// #define VBD
 
 #ifdef VBD
 #include "vbd/vbd-manager.h"
@@ -804,7 +804,7 @@ private:
         auto beforeProbeCreateTime = std::chrono::high_resolution_clock::now();
         pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &uRaytraceSceneBuffer, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao, bvh.get(),
             // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(20, 10, 20), vec3(0), vec3(16.5, 10, 16.5));
+            uvec3(40, 20, 40), vec3(0), vec3(16.5, 10, 16.5));
         auto afterProbeCreateTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(afterProbeCreateTime - beforeProbeCreateTime);
 

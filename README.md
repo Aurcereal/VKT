@@ -181,3 +181,20 @@ Using depth atlas for depth values, so we have bilinear filtering.  (Need to deb
 - Sampling bias: push the sampling point along the normal a bit to help the probes on the correct side of the wall and hurt the probes on the other side.
 - Offset the average depth a tiny bit (after sampling from depth texture, increment it a bit).
 
+---
+# 4/30/2026 Update - SAH BVH, SH Fixes & Windowing
+
+- I implemented BVH construction on the GPU with the Surface Area Heuristic, which is then traversed on the GPU when raytracing for baking DDGI probes.  Probe Baking runs a lot faster now, even with a very small mesh it runs 2 times faster.
+- I did a lot of SH debugging since there were a fair amount of random problems.  I also added Hanning windowing for very bright lights (blur the SH slightly to prevent artifacting).
+
+![](ShowcaseMedia/shFix.gif)
+
+A very bright sun light for somewhat harder lighting.
+
+
+
+| ![alt text](image-2.png) |
+|:--:|
+| Diagram from [Stupid SH Tricks Paper](https://ppsloan.org/publications/StupidSH36.pdf) showing windowing's improvements for bright sunlights |
+
+Should do windowing for environment too

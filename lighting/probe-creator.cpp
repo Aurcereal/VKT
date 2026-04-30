@@ -63,6 +63,10 @@ struct PBakePassInfo {
 	alignas(4) uint32_t currBake;
 };
 
+struct PSkyboxBakeInfo {
+	alignas(4) uint32_t currBake;
+};
+
 WBuffer* ProbeCreator::GetSkyboxSH() {
 	assert(isSkyboxBaked);
 	return skyboxSh.get();
@@ -77,7 +81,6 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	vector<float> zeroData(SCRATCH_BUFFER_SIZE, 0.0f);
 	zeroBuffer.CreateDeviceLocalFromData(*ref, SCRATCH_BUFFER_SIZE, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc, zeroData.data());
 	shScratchBuffer.Create(*ref, SCRATCH_BUFFER_SIZE, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eDeviceLocal);
-	ZeroOutScratchBuffer();
 
 	// Create Compute Dispatcher
 	computeDispatcher.Create(*ref);
@@ -91,7 +94,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::MParameter(ShaderParameter::USampler{.texture = skybox}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &shScratchBuffer}),
 	};
-	bakeSkyboxProbe.Create(*ref, "shaders/spherical-harmonics-sky.spv", skyShaParams, skyMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1));
+	bakeSkyboxProbe.Create(*ref, "shaders/spherical-harmonics-sky.spv", skyShaParams, skyMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PSkyboxBakeInfo));
 
 	// Create Skybox SH
 	skyboxSh = mkU<WBuffer>();
@@ -209,7 +212,7 @@ void ProbeCreator::AccumulateScratchIntoBuffer(WBuffer* buf, vk::DeviceSize dstO
 
 	// Divide by monte carlo count
 	for (int i = 0; i < 27; i++) {
-		sh[i] /= ((1.0f*SCRATCH_BUFFER_SIZE) / (1.0f*sizeof(float)) / 27.0f);// (1.0f * SQRT_THREADS_PER_PASS * SQRT_THREADS_PER_PASS);
+		sh[i] /= (static_cast<float>(skyboxBakeCount) * ((1.0f*SCRATCH_BUFFER_SIZE) / (1.0f*sizeof(float)) / 27.0f));// (1.0f * SQRT_THREADS_PER_PASS * SQRT_THREADS_PER_PASS);
 	}
 
 	for (int i = 0; i < 27; i++) {
@@ -258,8 +261,17 @@ void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform)
 
 WBuffer* ProbeCreator::BakeAndSetSkyboxProbe() {
 	// Dispatch
+	ZeroOutScratchBuffer();
 	computeDispatcher.StartRecord(*ref);
-	bakeSkyboxProbe.EnqueueDispatch(&computeDispatcher, uvec3(SQRT_THREADS_PER_PASS, SQRT_THREADS_PER_PASS, 1));
+	PSkyboxBakeInfo pushConstants;
+	for (int i = 0; i < skyboxBakeCount; i++) {
+		pushConstants.currBake = i;
+		bakeSkyboxProbe.EnqueuePushConstants(&computeDispatcher, &pushConstants);
+		bakeSkyboxProbe.EnqueueDispatch(&computeDispatcher, uvec3(SQRT_THREADS_PER_PASS, SQRT_THREADS_PER_PASS, 1));
+		if(i != skyboxBakeCount-1) bakeSkyboxProbe.EnqueueComputeBarrier(&computeDispatcher,
+			vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead,
+			vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead);
+	}
 	computeDispatcher.FinishRecordSubmit(*ref, true);
 
 	AccumulateScratchIntoBuffer(skyboxSh.get(), 0);

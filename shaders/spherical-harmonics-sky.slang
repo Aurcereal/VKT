@@ -9,6 +9,13 @@ groupshared float3[64][9] sharedCoefficients;
 SamplerCube skybox;
 RWStructuredBuffer<float> shCoefficients;
 
+struct PushConstants {
+    uint32_t currBake;
+}
+
+[[vk::push_constant]]
+ConstantBuffer<PushConstants> pushConstants;
+
 #define PI 3.141592
 
 float hash11(uint x) {
@@ -62,7 +69,7 @@ void main(uint3 id: SV_DispatchThreadID,
     uint3 threadIDWithinGroup3: SV_GroupThreadID,
     uint3 groupID3 : SV_GroupID) {
 
-    float3 rd = uniformSphere(float2(rngi(id.x - id.y+525), rngi(id.x + id.y+525)));
+    float3 rd = uniformSphere(float2(rngi(pushConstants.currBake*1392 + id.x - id.y+525), rngi(id.x + id.y+525 - pushConstants.currBake*372)));
     float3 li = SampleSkybox(rd, skybox);
     rd = normalize(rd);
 
@@ -89,17 +96,24 @@ void main(uint3 id: SV_DispatchThreadID,
     // sharedCoefficients[threadIDWithinGroup][7] = -0.27313710764 * rd.x * rd.z * li;
     // sharedCoefficients[threadIDWithinGroup][8] = 0.13656855382 * (rd.x * rd.x - rd.y * rd.y) * li * cosCo3;
 
-    sharedCoefficients[threadIDWithinGroup][0] = 0.28209479 * 0.28209479 * li * cosCo1;
+    // There's also context dependent one in https://ppsloan.org/publications/StupidSH36.pdf that takes direction dominance into account
+    float windowMults[3];
+    const float windowSize = 4.4;
+    for (int i = 0; i < 3; i++) {
+        windowMults[i] = 0.5 * (1 + cos(PI * float(i)) / windowSize);
+    }
 
-    sharedCoefficients[threadIDWithinGroup][1] = 0.4886025119029199 * 0.4886025119029199 * rd.y * li * cosCo2;
-    sharedCoefficients[threadIDWithinGroup][2] = 0.4886025119029199 * 0.4886025119029199 * rd.z * li * cosCo2;
-    sharedCoefficients[threadIDWithinGroup][3] = 0.4886025119029199 * 0.4886025119029199 * rd.x * li * cosCo2;
+    sharedCoefficients[threadIDWithinGroup][0] = 0.28209479 * 0.28209479 * li * cosCo1 * windowMults[0];
 
-    sharedCoefficients[threadIDWithinGroup][4] = 1.0925484305920792 * 1.0925484305920792 * rd.x * rd.y * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][5] = 1.0925484305920792 * 1.0925484305920792 * rd.y * rd.z * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][6] = 0.31539156525252005 * 0.31539156525252005 * (3. * rd.z * rd.z - 1.) * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][7] = 1.0925484305920792 * 1.0925484305920792 * rd.x * rd.z * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][8] = 0.5462742152960396 * 0.5462742152960396 * (rd.x * rd.x - rd.y * rd.y) * li * cosCo3;
+    sharedCoefficients[threadIDWithinGroup][1] = 0.4886025119029199 * 0.4886025119029199 * rd.y * li * cosCo2 * windowMults[1];
+    sharedCoefficients[threadIDWithinGroup][2] = 0.4886025119029199 * 0.4886025119029199 * rd.z * li * cosCo2 * windowMults[1];
+    sharedCoefficients[threadIDWithinGroup][3] = 0.4886025119029199 * 0.4886025119029199 * rd.x * li * cosCo2 * windowMults[1];
+
+    sharedCoefficients[threadIDWithinGroup][4] = 1.0925484305920792 * 1.0925484305920792 * rd.x * rd.y * li * cosCo3 * windowMults[2];
+    sharedCoefficients[threadIDWithinGroup][5] = 1.0925484305920792 * 1.0925484305920792 * rd.y * rd.z * li * cosCo3 * windowMults[2];
+    sharedCoefficients[threadIDWithinGroup][6] = 0.31539156525252005 * 0.31539156525252005 * (3. * rd.z * rd.z - 1.) * li * cosCo3 * windowMults[2];
+    sharedCoefficients[threadIDWithinGroup][7] = 1.0925484305920792 * 1.0925484305920792 * rd.x * rd.z * li * cosCo3 * windowMults[2];
+    sharedCoefficients[threadIDWithinGroup][8] = 0.5462742152960396 * 0.5462742152960396 * (rd.x * rd.x - rd.y * rd.y) * li * cosCo3 * windowMults[2];
 
     // Wait til all threads in group are done
     GroupMemoryBarrierWithGroupSync();
@@ -111,9 +125,9 @@ void main(uint3 id: SV_DispatchThreadID,
             for (int thread = 0; thread < 64; thread++) {
                 sum += sharedCoefficients[thread][basis];
             }
-            shCoefficients[groupID * 27 + basis * 3 + 0] = sum.x;
-            shCoefficients[groupID * 27 + basis * 3 + 1] = sum.y;
-            shCoefficients[groupID * 27 + basis * 3 + 2] = sum.z;
+            shCoefficients[groupID * 27 + basis * 3 + 0] += sum.x;
+            shCoefficients[groupID * 27 + basis * 3 + 1] += sum.y;
+            shCoefficients[groupID * 27 + basis * 3 + 2] += sum.z;
         }
     }
 }
