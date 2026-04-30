@@ -113,24 +113,28 @@ void main(uint3 id: SV_DispatchThreadID,
     sharedDepthSamples[threadIDWithinGroup] = float4(rd, depth);
 
     // Updated shared sh
-    float cosCo1 = PI;
-    float cosCo2 = (2. / 3.) * PI;
-    float cosCo3 = PI * .25;
-    // cosCo1 *= cosCo1;
-    // cosCo2 *= cosCo2;
-    // cosCo3 *= cosCo3;
+    const float cosCo1 = PI;
+    const float cosCo2 = (2. / 3.) * PI;
+    const float cosCo3 = PI * .25;
 
-    sharedCoefficients[threadIDWithinGroup][0] = 0.28209479 * 0.28209479 * li * cosCo1;
+    // There's also context dependent one in https://ppsloan.org/publications/StupidSH36.pdf that takes direction dominance into account
+    float windowMults[3];
+    const float windowSize = 10.;
+    for (int i = 0; i < 3; i++) {
+        windowMults[i] = 0.5 * (1 + cos(PI * float(i)) / windowSize);
+    }
 
-    sharedCoefficients[threadIDWithinGroup][1] = 0.4886025119029199 * 0.4886025119029199 * rd.y * li * cosCo2;
-    sharedCoefficients[threadIDWithinGroup][2] = 0.4886025119029199 * 0.4886025119029199 * rd.z * li * cosCo2;
-    sharedCoefficients[threadIDWithinGroup][3] = 0.4886025119029199 * 0.4886025119029199 * rd.x * li * cosCo2;
+    sharedCoefficients[threadIDWithinGroup][0] = 0.28209479 * 0.28209479 * li * cosCo1 * windowMults[0];
 
-    sharedCoefficients[threadIDWithinGroup][4] = 1.0925484305920792 * 1.0925484305920792 * rd.x * rd.y * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][5] = 1.0925484305920792 * 1.0925484305920792 * rd.y * rd.z * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][6] = 0.31539156525252005 * 0.31539156525252005 * (3. * rd.z * rd.z - 1.) * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][7] = 1.0925484305920792 * 1.0925484305920792 * rd.x * rd.z * li * cosCo3;
-    sharedCoefficients[threadIDWithinGroup][8] = 0.5462742152960396 * 0.5462742152960396 * (rd.x * rd.x - rd.y * rd.y) * li * cosCo3;
+    sharedCoefficients[threadIDWithinGroup][1] = 0.4886025119029199 * 0.4886025119029199 * rd.y * li * cosCo2 * windowMults[1];
+    sharedCoefficients[threadIDWithinGroup][2] = 0.4886025119029199 * 0.4886025119029199 * rd.z * li * cosCo2 * windowMults[1];
+    sharedCoefficients[threadIDWithinGroup][3] = 0.4886025119029199 * 0.4886025119029199 * rd.x * li * cosCo2 * windowMults[1];
+
+    sharedCoefficients[threadIDWithinGroup][4] = 1.0925484305920792 * 1.0925484305920792 * rd.x * rd.y * li * cosCo3 * windowMults[2];
+    sharedCoefficients[threadIDWithinGroup][5] = 1.0925484305920792 * 1.0925484305920792 * rd.y * rd.z * li * cosCo3 * windowMults[2];
+    sharedCoefficients[threadIDWithinGroup][6] = 0.31539156525252005 * 0.31539156525252005 * (3. * rd.z * rd.z - 1.) * li * cosCo3 * windowMults[2];
+    sharedCoefficients[threadIDWithinGroup][7] = 1.0925484305920792 * 1.0925484305920792 * rd.x * rd.z * li * cosCo3 * windowMults[2];
+    sharedCoefficients[threadIDWithinGroup][8] = 0.5462742152960396 * 0.5462742152960396 * (rd.x * rd.x - rd.y * rd.y) * li * cosCo3 * windowMults[2];
 
     // Wait til all threads in group are done
     GroupMemoryBarrierWithGroupSync();

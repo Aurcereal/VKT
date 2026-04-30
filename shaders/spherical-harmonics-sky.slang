@@ -77,24 +77,9 @@ void main(uint3 id: SV_DispatchThreadID,
     uint threadIDWithinGroup = threadIDWithinGroup3.y * 8 + threadIDWithinGroup3.x;
     uint groupID = groupID3.y * 32 + groupID3.x;
 
-    float cosCo1 = PI;
-    float cosCo2 = (2. / 3.) * PI;
-    float cosCo3 = PI * .25;
-    //cosCo1 *= cosCo1;
-    //cosCo2 *= cosCo2;
-    //cosCo3 *= cosCo3;
-
-    // sharedCoefficients[threadIDWithinGroup][0] = 0.28209479 * li * cosCo1;
-
-    // sharedCoefficients[threadIDWithinGroup][1] = -0.32573500793 * rd.y * li * cosCo2;
-    // sharedCoefficients[threadIDWithinGroup][2] = 0.32573500793 * rd.z * li * cosCo2;
-    // sharedCoefficients[threadIDWithinGroup][3] = -0.32573500793 * rd.x * li * cosCo2;
-
-    // sharedCoefficients[threadIDWithinGroup][4] = 0.27313710764 * rd.x * rd.y * li * cosCo3;
-    // sharedCoefficients[threadIDWithinGroup][5] = -0.27313710764 * rd.y * rd.z * li * cosCo3;
-    // sharedCoefficients[threadIDWithinGroup][6] = 0.07884789131 * (3. * rd.z * rd.z - 1.) * li * cosCo3;
-    // sharedCoefficients[threadIDWithinGroup][7] = -0.27313710764 * rd.x * rd.z * li;
-    // sharedCoefficients[threadIDWithinGroup][8] = 0.13656855382 * (rd.x * rd.x - rd.y * rd.y) * li * cosCo3;
+    const float cosCo1 = PI;
+    const float cosCo2 = (2. / 3.) * PI;
+    const float cosCo3 = PI * .25;
 
     // There's also context dependent one in https://ppsloan.org/publications/StupidSH36.pdf that takes direction dominance into account
     float windowMults[3];
