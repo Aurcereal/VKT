@@ -86,12 +86,26 @@ void WRenderPass::Start(RenderTarget* target, vk::raii::CommandBuffer* cmd, bool
     currCmd->setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), { target->dim.x, target->dim.y }));
 }
 
-void WRenderPass::EnqueueSetMaterial(const Material& mat, int setIndex, vector<uint32_t> dynamicIndices) {
+Material* currMat = nullptr;
+void WRenderPass::EnqueueSetMaterial(Material& mat, int setIndex, vector<uint32_t> dynamicIndices) {
+    currMat = &mat;
     (static_cast<const ShaderPipeline*>(mat.pipeline))->Bind(*currCmd); // TODO: separate binding mat and shader for optimization
     (static_cast<const ShaderPipeline*>(mat.pipeline))->BindMaterialDescriptorSets(*ref, *currCmd, mat, setIndex, dynamicIndices);
 }
 
-void WRenderPass::EnqueueDraw(const Mesh& mesh) {
+void WRenderPass::EnqueueDraw(const Mesh& mesh, bool sendPBRInfo) {
+    if (sendPBRInfo) {
+        assert(currMat);
+
+        PPBRInfo pbrInfo = {
+            .albedoMult = mesh.baseColorMult,
+            .hasAlbedoTexture = mesh.baseColor != nullptr,
+            .hasMetallicRoughnessTexture = mesh.metallicRoughness != nullptr,
+            .hasAOTexture = mesh.aoTexture != nullptr
+        };
+        currMat->pipeline->EnqueuePushConstants(currCmd, &pbrInfo);
+    }
+
     currCmd->bindVertexBuffers(0, *(mesh.vertexBuffer.buffer), { 0 }); // Bind buffer to our binding which has layout and stride stuff {0} is array of vertex buffers to bind
     currCmd->bindIndexBuffer(*(mesh.indexBuffer.buffer), 0, vk::IndexType::eUint32);
     currCmd->drawIndexed(mesh.indexCount, 1, 0, 0, 0);

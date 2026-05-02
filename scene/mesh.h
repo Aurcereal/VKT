@@ -2,6 +2,10 @@
 
 #include "defines.h"
 #include "scene/buffer.h"
+#include "scene/texture.h"
+#include "scene/shader-parameter.h"
+#include "scene/pipeline.h"
+#include "scene/material.h"
 
 using namespace glm;
 using namespace std;
@@ -48,7 +52,8 @@ namespace std {
 // You should even go a step further, allocate a single vertex and index buffer for lots of things and use offsets to bindvertexbuffers to store lots of 3D objects
 class Mesh {
 public:
-    void CreateFromFile(const VulkanReferences&, const std::string& path, bool isStorageBuffer = false);
+    void CreateFromOBJFile(const VulkanReferences&, const std::string& path, bool isStorageBuffer = false);
+    void CreateFromGLTFFile(const VulkanReferences&, const std::string& path, ShaderPipeline* pbrShader, const vector<ShaderParameter::MParameter>& pbrMParams, int textureParamStartIndex, bool isStorageBuffer = false);
     void CreateFromArrays(const VulkanReferences& ref, const vector<vec3>& positions, const vector<vec3>& colors, const vector<vec3>& normals, const vector<uint32_t>& indices, bool isStorageBuffer = false);
 
     WBuffer vertexBuffer;
@@ -58,12 +63,28 @@ public:
     void GetPositions(vector<vec3>*) const;
     const vector<uint32_t>& GetIndices() const;
 
+    vec4 baseColorMult;
+    uPtr<WTexture> baseColor;
+    uPtr<WTexture> metallicRoughness;
+    // normal
+    uPtr<WTexture> aoTexture;
+    Material mat;
+
 private:
+    friend class WRenderPass;
     void CreateBuffers(const VulkanReferences&);
-    void LoadModel(const std::string& path);
+    void LoadOBJModel(const std::string& path);
+    void LoadGLTFModel(const VulkanReferences& ref, const std::string& path);
 
     vector<Vertex> vertices;
     vector<uint32_t> indices;
 
     bool isStorageBuffer;
+};
+
+struct PPBRInfo {
+    vec4 albedoMult;
+    bool hasAlbedoTexture;
+    bool hasMetallicRoughnessTexture;
+    bool hasAOTexture;
 };

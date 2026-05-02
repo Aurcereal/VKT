@@ -19,7 +19,7 @@ import vulkan_hpp;
 #include <glm/gtx/hash.hpp>
 
 #include "stb_image.h"
-#include "tiny_obj_loader.h"
+// #include "tiny_obj_loader.h"
 
 #define U32T(v) (static_cast<uint32_t>(v))
 

@@ -49,9 +49,15 @@ VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
 }
 
 // TODO: these are combined image samplers w/ image, but they all use same sampler so i can just separate explicitly Texture2D and SamplerState have 1 sampler and lots of textures (need to change descriptor pool oc)
-Sampler2D texSampler;
-Sampler2D metallicSampler;
-Sampler2D roughnessSampler;
+struct PushConstants {
+    float4 albedoMult;
+    bool hasAlbedoTexture;
+    bool hasMetallicRoughnessTexture;
+    bool hasAOTexture;
+};
+[[vk::push_constant]] ConstantBuffer<PushConstants> pushConstants;
+Sampler2D albedoSampler;
+Sampler2D metallicRoughnessSampler;
 Sampler2D aoSampler;
 
 StructuredBuffer<Vertex> vertices;
@@ -70,10 +76,11 @@ float4 fragMain(FSInput o) : SV_Target
     float3 camPos = -mul(float3x3(viewTranspose), viewTranspose[3].xyz);
     float3 norm = normalize(o.norm);//normalize(o.worldPos); // for sphere for now, but get normals and test them soon
 
-    const float3 albedo = textureGammaCorrect(texSampler.Sample(o.uv).rgb); // float3(1.);// // float3(1.0,0.,0.);
-    const float metallic = 0.;        // metallicSampler.Sample(o.uv).r; // 1.0; // 0.5
-    const float roughness = 0.2;//roughnessSampler.Sample(o.uv).r;                // 0.1;
-    const float ambientOcclusion = 0.;//aoSampler.Sample(o.uv).r;//0.;
+    const float3 albedo = textureGammaCorrect(albedoSampler.Sample(o.uv).rgb); // float3(1.);// // float3(1.0,0.,0.);
+    // TODO: all meshes should have push constants for this shader and check to see if should use these vals
+    const float metallic = metallicRoughnessSampler.Sample(o.uv).g;            // 1.0; // 0.5
+    const float roughness = metallicRoughnessSampler.Sample(o.uv).b;//roughnessSampler.Sample(o.uv).r;                // 0.1;
+    const float ambientOcclusion = aoSampler.Sample(o.uv).r;
 
     float3 Lo = float3(0.);
     Lo += 0.03 * ambientOcclusion * albedo; // Ambient Light

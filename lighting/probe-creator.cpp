@@ -3,7 +3,7 @@
 #include "helper/math.h"
 
 // Assume no other dynamic offs in mat
-void ProbeVolume::DrawDebugProbeVolume(WRenderPass* renderPass, const Mesh& probeMesh, const Material& mat, uint32_t setIndex) {
+void ProbeVolume::DrawDebugProbeVolume(WRenderPass* renderPass, const Mesh& probeMesh, Material& mat, uint32_t setIndex) {
 	uint32_t count = probeCounts.x * probeCounts.y * probeCounts.z;
 
 	for (uint32_t i = 0; i < count; i++) {
@@ -73,7 +73,7 @@ WBuffer* ProbeCreator::GetSkyboxSH() {
 }
 
 // TODO: all these params def annoying so not having it, need to have some struct to represent the world
-void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<WBuffer>* uniformBuffers, vector<WBuffer>* uRaytracedSceneBuffer, WTexture* testCubeMap, Mesh* testRoom, WTexture* testRoomTexture, WTexture* metallic, WTexture* roughness, WTexture* ao, const BVHGPU* bvh,
+void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<WBuffer>* uniformBuffers, vector<WBuffer>* uRaytracedSceneBuffer, WTexture* testCubeMap, Mesh* testRoom, WTexture* testRoomTexture, WTexture* metallicRoughness, WTexture* ao, const BVHGPU* bvh,
 	uvec3 probeCounts, vec3 boundingBoxOrigin, vec3 boundingBoxSize) {
 	this->ref = ref;
 
@@ -154,7 +154,6 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
@@ -169,8 +168,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->triangleRedirectionBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->nodeBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::USampler {.texture = testRoomTexture}),
-		ShaderParameter::MParameter(ShaderParameter::USampler {.texture = metallic}),
-		ShaderParameter::MParameter(ShaderParameter::USampler {.texture = roughness}),
+		ShaderParameter::MParameter(ShaderParameter::USampler {.texture = metallicRoughness}),
 		ShaderParameter::MParameter(ShaderParameter::USampler {.texture = ao}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = skyboxSh.get() }),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->shCoefficients}),
@@ -243,7 +241,7 @@ void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform)
 		bakePassInfo.currBake = i;
 		for (int g = 0; g < groupCount; g++) {
 			bakePassInfo.currGroup = g;
-			bakeEnvironmentProbe.EnqueuePushConstants(&computeDispatcher, &bakePassInfo);
+			bakeEnvironmentProbe.EnqueuePushConstants(&computeDispatcher.cmd, &bakePassInfo);
 			bakeEnvironmentProbe.EnqueueDispatch(&computeDispatcher, uvec3(SQRT_THREADS_PER_PASS, SQRT_THREADS_PER_PASS, 1));
 		}
 		bakeEnvironmentProbe.EnqueueComputeBarrier(&computeDispatcher, 
@@ -266,7 +264,7 @@ WBuffer* ProbeCreator::BakeAndSetSkyboxProbe() {
 	PSkyboxBakeInfo pushConstants;
 	for (int i = 0; i < skyboxBakeCount; i++) {
 		pushConstants.currBake = i;
-		bakeSkyboxProbe.EnqueuePushConstants(&computeDispatcher, &pushConstants);
+		bakeSkyboxProbe.EnqueuePushConstants(&computeDispatcher.cmd, &pushConstants);
 		bakeSkyboxProbe.EnqueueDispatch(&computeDispatcher, uvec3(SQRT_THREADS_PER_PASS, SQRT_THREADS_PER_PASS, 1));
 		if(i != skyboxBakeCount-1) bakeSkyboxProbe.EnqueueComputeBarrier(&computeDispatcher,
 			vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead,

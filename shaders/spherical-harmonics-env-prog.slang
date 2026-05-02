@@ -15,8 +15,7 @@ StructuredBuffer<uint32_t> worldIndices;
 StructuredBuffer<uint32_t> triangleRedirection;
 StructuredBuffer<BVHNode> bvhNodes;
 Sampler2D worldTex;
-Sampler2D worldMetal;
-Sampler2D worldRoughness;
+Sampler2D worldMetalRoughness;
 Sampler2D worldAO;
 StructuredBuffer<float> skySh;
 RWStructuredBuffer<float> shCoefficients;
@@ -104,7 +103,7 @@ void main(uint3 id: SV_DispatchThreadID,
     bvh.nodes = bvhNodes;
 
     float3 rd = uniformSphere(float2(rngi(id.x - id.y + 525 + pushConstants.currGroup * 23 - pushConstants.currBake * 7), rngi(id.x + id.y + 525 - pushConstants.currGroup * 15 + pushConstants.currBake * 9)));
-    float4 samp = SampleEnvironmentBVH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, worldTex, worldMetal, worldRoughness, worldAO, skySh, skybox);
+    float4 samp = SampleEnvironmentBVH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, worldTex, worldMetalRoughness, worldAO, skySh, skybox);
     float3 li = samp.xyz;
     float depth = samp.w;
 

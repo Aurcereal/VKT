@@ -54,22 +54,34 @@ void WTexture::Create(const VulkanReferences& ref,
     }
 }
 
-void WTexture::CreateFromFile(const VulkanReferences& ref, const std::string& path, 
+void WTexture::CreateFromFile(const VulkanReferences& ref, const std::string& path,
+    vk::Format format,
+    vk::ImageTiling tiling,
+    vk::ImageUsageFlags usage,
+    vk::MemoryPropertyFlags properties, vk::ImageAspectFlags imageViewAspectFlags, vk::ImageLayout targetLayout) {
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load(path.c_str(),
+        &texWidth, &texHeight, &texChannels,
+        STBI_rgb_alpha); // Forces loading alpha channel even if one doesnt exist
+    
+
+    if (!pixels) {
+        throw std::runtime_error("failed to load texture image");
+        return;
+    }
+
+    CreateFromPixels(ref, pixels, texWidth, texHeight, format, tiling, usage, properties, imageViewAspectFlags, targetLayout);
+    stbi_image_free(pixels);
+}
+
+void WTexture::CreateFromPixels(const VulkanReferences& ref, const uint8_t* pixels, int texWidth, int texHeight,
     vk::Format format,
     vk::ImageTiling tiling,
     vk::ImageUsageFlags usage,
     vk::MemoryPropertyFlags properties, vk::ImageAspectFlags imageViewAspectFlags, vk::ImageLayout targetLayout) 
 {
-    int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load(path.c_str(),
-        &texWidth, &texHeight, &texChannels,
-        STBI_rgb_alpha); // Forces loading alpha channel even if one doesnt exist
+    
     vk::DeviceSize imageByteSize = texWidth * texHeight * 4;
-
-    if (!pixels) {
-        throw std::runtime_error("failed to load texture image");
-    }
-
     // Staging to get the actual data closer to GPU (which we cant directly write to ig)
     WBuffer stagingBuffer;
     stagingBuffer.Create(ref, imageByteSize,
@@ -78,8 +90,7 @@ void WTexture::CreateFromFile(const VulkanReferences& ref, const std::string& pa
     stagingBuffer.MapMemory();
     memcpy(stagingBuffer.mappedMemory, pixels, imageByteSize);
     stagingBuffer.UnmapMemory();
-
-    stbi_image_free(pixels);
+    
     pixels = nullptr;
 
     // We want to copy from the image staging buffer to an image (not just a buffer)

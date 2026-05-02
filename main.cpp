@@ -118,6 +118,7 @@ private:
     Mesh chairMesh;
     Mesh cubeMesh;
     Mesh testRoom;
+    Mesh tent;
 
     vector<WBuffer> uniformBuffers; // Memory for each frame in flight so each frame can have diff uniform vals
     vector<WBuffer> uEntityBuffers;
@@ -756,11 +757,11 @@ private:
         );
 
         // Meshes
-        blobMesh.CreateFromFile(coreReferences, "models/blob.obj", true);
-        sphereMesh.CreateFromFile(coreReferences, "models/smoothSphere.obj", true);
-        chairMesh.CreateFromFile(coreReferences, "models/morrisChair.obj", true);
-        cubeMesh.CreateFromFile(coreReferences, "models/cube.obj");
-        testRoom.CreateFromFile(coreReferences, "models/testRoom.obj", true);
+        blobMesh.CreateFromOBJFile(coreReferences, "models/blob.obj", true);
+        sphereMesh.CreateFromOBJFile(coreReferences, "models/smoothSphere.obj", true);
+        chairMesh.CreateFromOBJFile(coreReferences, "models/morrisChair.obj", true);
+        cubeMesh.CreateFromOBJFile(coreReferences, "models/cube.obj");
+        testRoom.CreateFromOBJFile(coreReferences, "models/testRoom.obj", true);
         std::cout << "Test Room Index Count: " << testRoom.indexCount << std::endl;
         
         // Textures
@@ -802,9 +803,9 @@ private:
         // Bake Probes
         UpdateUniformBuffer(0);
         auto beforeProbeCreateTime = std::chrono::high_resolution_clock::now();
-        pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &uRaytraceSceneBuffer, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &roughness, &ao, bvh.get(),
+        pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &uRaytraceSceneBuffer, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &ao, bvh.get(),
             // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(40, 20, 40), vec3(0), vec3(16.5, 10, 16.5));
+            uvec3(10, 5, 10), vec3(0), vec3(16.5, 10, 16.5));
         auto afterProbeCreateTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(afterProbeCreateTime - beforeProbeCreateTime);
 
@@ -814,7 +815,6 @@ private:
         vector shaderParams = {
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::DYNAMIC_UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
@@ -841,7 +841,6 @@ private:
             }),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testRoomTexture}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &metallic}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &roughness}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.vertexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.indexBuffer}),
@@ -851,8 +850,10 @@ private:
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
-        shaderPipeline.Create(coreReferences, "shaders/pbr-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams);
+        shaderPipeline.Create(coreReferences, "shaders/pbr-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams, true, false, true, sizeof(PPBRInfo));
         testMaterial.Create(&shaderPipeline, coreReferences, materialParams);
+
+        tent.CreateFromGLTFFile(coreReferences, "models/tent.glb", &shaderPipeline, materialParams, 2, false);
 
         // Reflect Shader & Material
         vector reflectShaderParams = {
@@ -864,7 +865,6 @@ private:
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
@@ -890,7 +890,6 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->triangleRedirectionBuffer}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testRoomTexture}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &metallic}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &roughness}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH() })
         };
@@ -912,7 +911,6 @@ private:
             }),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &whiteTexture}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &metallic}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &roughness}),
             ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.vertexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.indexBuffer}),
@@ -1062,8 +1060,8 @@ private:
         renderPass.EnqueueSetMaterial(testMaterial, currFrameIndex, { 0 });
         renderPass.EnqueueDraw(testRoom);
         //renderPass.EnqueueSetMaterial(blobMaterial, currFrameIndex, { 1 });
-        renderPass.EnqueueSetMaterial(reflectMaterial, currFrameIndex, { 1 });
-        renderPass.EnqueueDraw(blobMesh);
+        renderPass.EnqueueSetMaterial(tent.mat, currFrameIndex, { 1 });
+        renderPass.EnqueueDraw(tent, true);
 
         if (showDebugProbes) {
             pc.probeVolume->DrawDebugProbeVolume(&renderPass, sphereMesh, probeOrbMaterial, currFrameIndex);

@@ -13,8 +13,8 @@ public:
 	void Create(const VulkanReferences&);
 
 	void Start(RenderTarget*, vk::raii::CommandBuffer* cmd, bool waitForPrevFinish = true);
-	void EnqueueSetMaterial(const Material&, int setIndex, vector<uint32_t> dynamicOffsets = {});
-	void EnqueueDraw(const Mesh&);
+	void EnqueueSetMaterial(Material&, int setIndex, vector<uint32_t> dynamicOffsets = {});
+	void EnqueueDraw(const Mesh&, bool sendPBRData = false);
 	void FinishExecute(bool waitForFinish = true, vk::ImageLayout targetColorLayout = vk::ImageLayout::eUndefined, vk::raii::Semaphore* waitSem = nullptr, vk::raii::Semaphore* signalSem = nullptr);
 
 	void WaitForFinish();

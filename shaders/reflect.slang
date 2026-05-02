@@ -19,7 +19,6 @@ StructuredBuffer<BVHNode> bvhNodes;
 StructuredBuffer<uint32_t> triangleRedirection;
 Sampler2D worldTex;
 Sampler2D worldMetal;
-Sampler2D worldRoughness;
 Sampler2D worldAO;
 
 StructuredBuffer<float> skyboxSh;
@@ -72,7 +71,7 @@ float4 fragMain(VSOutput o) : SV_Target
     bvh.triangleRedirection = triangleRedirection;
     bvh.nodes = bvhNodes;
     
-    float3 Lo = SampleEnvironmentBVH(sta, reflRay, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, worldTex, worldMetal, worldRoughness, worldAO, skyboxSh, skybox).xyz;
+    float3 Lo = SampleEnvironmentBVH(sta, reflRay, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, worldTex, worldMetal, worldAO, skyboxSh, skybox).xyz;
     float3 col = gammaCorrect(reinhardOp(Lo));
 
     return float4(col, 1.0);//float4(SampleSh(norm, skyboxSh, 0), 1.);//float4(col, 1.);

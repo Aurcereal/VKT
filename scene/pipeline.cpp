@@ -25,7 +25,9 @@ using namespace std;
     return shaderModule;
 }
 
-void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, const vk::Format* colorFormats, const vk::Format& depthFormat, const vector<ShaderParameter::SParameter>& parameters, bool depthEnabled, bool flipFaces) {
+void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, const vk::Format* colorFormats, const vk::Format& depthFormat, const vector<ShaderParameter::SParameter>& parameters, bool depthEnabled, bool flipFaces, bool usePushConstants, vk::DeviceSize pushConstantSize) {
+    WPipeline::Create(usePushConstants, pushConstantSize);
+    
     // Create our shader uniforms/descriptor set layouts
     CreateDescriptorSetLayout(ref, parameters);
 
@@ -243,8 +245,7 @@ void ShaderPipeline::BindMaterialDescriptorSets(const VulkanReferences& ref, con
 
 void ComputePipeline::Create(const VulkanReferences& ref, const string& path, const vector<ShaderParameter::SParameter>& parameters, const vector<ShaderParameter::MParameter>& parameterData, uvec3 workGroupSize, bool usePushConstants, vk::DeviceSize pushConstantSize) {
     this->workGroupSize = workGroupSize;
-    this->usePushConstants = usePushConstants;
-    this->pushConstantsSize = pushConstantSize;
+    WPipeline::Create(usePushConstants, pushConstantSize);
 
     //
     auto computeModule = CreateShaderModule(ref, path);
@@ -305,10 +306,15 @@ void ComputePipeline::EnqueueDispatch(ComputeDispatcher* dispatcher, uvec3 total
     dispatcher->cmd.dispatch(workGroupCount.x, workGroupCount.y, workGroupCount.z);
 }
 
-void ComputePipeline::EnqueuePushConstants(ComputeDispatcher* dispatcher, void* data) {
+void WPipeline::Create(bool usePushConstants, vk::DeviceSize pushConstantSize) {
+    this->usePushConstants = usePushConstants;
+    this->pushConstantsSize = pushConstantSize;
+}
+
+void WPipeline::EnqueuePushConstants(vk::raii::CommandBuffer* cmd, void* data) {
     // todo: use modern but requires generics?
     assert(pushConstantsSize != 0);
-    vkCmdPushConstants(*dispatcher->cmd, *pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstantsSize, data);
+    vkCmdPushConstants(**cmd, *pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstantsSize, data);
 }
 
 void ComputePipeline::EnqueueComputeBarrier(ComputeDispatcher* dispatcher, vk::AccessFlags srcAccess, vk::AccessFlags dstAccess) {

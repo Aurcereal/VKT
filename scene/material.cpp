@@ -7,7 +7,7 @@ using namespace std;
 
 using WDescriptorSet = std::variant<vk::DescriptorImageInfo, vk::DescriptorBufferInfo>;
 
-void Material::Create(const WPipeline* pipeline, const VulkanReferences& ref, const vector<ShaderParameter::MParameter>& parameters, int duplicationCount) {
+void Material::Create(WPipeline* pipeline, const VulkanReferences& ref, const vector<ShaderParameter::MParameter>& parameters, int duplicationCount) {
     this->pipeline = pipeline;
     this->duplicationCount = duplicationCount;
     this->params = parameters;

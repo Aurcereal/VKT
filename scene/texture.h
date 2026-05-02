@@ -15,6 +15,11 @@ public:
         vk::ImageTiling tiling = vk::ImageTiling::eOptimal,
         vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
         vk::MemoryPropertyFlags properties = vk::MemoryPropertyFlagBits::eDeviceLocal, vk::ImageAspectFlags imageViewAspectFlags = vk::ImageAspectFlagBits::eColor, vk::ImageLayout targetLayout = vk::ImageLayout::eShaderReadOnlyOptimal);
+    void CreateFromPixels(const VulkanReferences& ref, const uint8_t* pixels, int width, int height,
+        vk::Format format,
+        vk::ImageTiling tiling = vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlags properties = vk::MemoryPropertyFlagBits::eDeviceLocal, vk::ImageAspectFlags imageViewAspectFlags = vk::ImageAspectFlagBits::eColor, vk::ImageLayout targetLayout = vk::ImageLayout::eShaderReadOnlyOptimal);
     void CreateCubeMapFromFiles(const VulkanReferences& ref, std::array<std::string, 6> paths,
         vk::Format format,
         vk::ImageTiling tiling = vk::ImageTiling::eOptimal,
