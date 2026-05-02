@@ -63,6 +63,8 @@ public:
         assert(hasSampler);
         return sampler;
     }
+
+    inline bool IsCreated() { return isCreated; }
 private:
     void CreateMainImageView(const VulkanReferences& ref, vk::ImageAspectFlags aspectFlags = vk::ImageAspectFlagBits::eColor);
     void CreateMainCubeMapImageView(const VulkanReferences& ref, vk::ImageAspectFlags aspectFlags = vk::ImageAspectFlagBits::eColor);

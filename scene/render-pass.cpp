@@ -93,19 +93,7 @@ void WRenderPass::EnqueueSetMaterial(Material& mat, int setIndex, vector<uint32_
     (static_cast<const ShaderPipeline*>(mat.pipeline))->BindMaterialDescriptorSets(*ref, *currCmd, mat, setIndex, dynamicIndices);
 }
 
-void WRenderPass::EnqueueDraw(const Mesh& mesh, bool sendPBRInfo) {
-    if (sendPBRInfo) {
-        assert(currMat);
-
-        PPBRInfo pbrInfo = {
-            .albedoMult = mesh.baseColorMult,
-            .hasAlbedoTexture = mesh.baseColor != nullptr,
-            .hasMetallicRoughnessTexture = mesh.metallicRoughness != nullptr,
-            .hasAOTexture = mesh.aoTexture != nullptr
-        };
-        currMat->pipeline->EnqueuePushConstants(currCmd, &pbrInfo);
-    }
-
+void WRenderPass::EnqueueDraw(const Mesh& mesh) {
     currCmd->bindVertexBuffers(0, *(mesh.vertexBuffer.buffer), { 0 }); // Bind buffer to our binding which has layout and stride stuff {0} is array of vertex buffers to bind
     currCmd->bindIndexBuffer(*(mesh.indexBuffer.buffer), 0, vk::IndexType::eUint32);
     currCmd->drawIndexed(mesh.indexCount, 1, 0, 0, 0);

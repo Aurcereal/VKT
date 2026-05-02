@@ -47,14 +47,40 @@ namespace std {
     };
 }
 
+struct MultiPrimitivePBRInfo {
+    vec4 baseColorMult;
+    vector<WTexture> baseColorTexs;
+    vector<WTexture> metallicRoughnessTexs;
+    // normal
+    vector<WTexture> aoTexs;
+    vector<uint32_t> triToMaterialIndex;
+    WBuffer triToMaterialIndexBuffer;
+};
+
+struct SinglePrimitivePBRInfo {
+    vec4 baseColorMult;
+    WTexture baseColorTex;
+    WTexture metallicRoughnessTex;
+    WTexture aoTex;
+    Material mat;
+    vector<WBuffer> uPbrInfo;
+};
+
+namespace tinygltf {
+    class Model;
+    class Primitive;
+}
+
 // Staging allows us to use high performance memory for loading vertex data
 // In practice, not good to do a separate allocation for every object, better to do one big one and split it up (VulkanMemoryAllocator library)
 // You should even go a step further, allocate a single vertex and index buffer for lots of things and use offsets to bindvertexbuffers to store lots of 3D objects
 class Mesh {
 public:
     void CreateFromOBJFile(const VulkanReferences&, const std::string& path, bool isStorageBuffer = false);
-    void CreateFromGLTFFile(const VulkanReferences&, const std::string& path, ShaderPipeline* pbrShader, const vector<ShaderParameter::MParameter>& pbrMParams, int textureParamStartIndex, bool isStorageBuffer = false);
+    void CreateFromGLTFFile(const VulkanReferences&, const std::string& path, bool isStorageBuffer = false);
     void CreateFromArrays(const VulkanReferences& ref, const vector<vec3>& positions, const vector<vec3>& colors, const vector<vec3>& normals, const vector<uint32_t>& indices, bool isStorageBuffer = false);
+
+    static uPtr<vector<Mesh>> CreatePrimitiveMeshesFromGLTFFile(const VulkanReferences&, const std::string& path, ShaderPipeline* pbrShader, const vector<ShaderParameter::MParameter>& pbrMParams, int textureParamStartIndex, bool isStorageBuffer = false);
 
     WBuffer vertexBuffer;
     WBuffer indexBuffer;
@@ -63,18 +89,18 @@ public:
     void GetPositions(vector<vec3>*) const;
     const vector<uint32_t>& GetIndices() const;
 
-    vec4 baseColorMult;
-    uPtr<WTexture> baseColor;
-    uPtr<WTexture> metallicRoughness;
-    // normal
-    uPtr<WTexture> aoTexture;
-    Material mat;
-
+    uPtr<MultiPrimitivePBRInfo> multiPrimitivePBR;
+    uPtr<SinglePrimitivePBRInfo> singlePrimitivePBR;
 private:
     friend class WRenderPass;
+
     void CreateBuffers(const VulkanReferences&);
     void LoadOBJModel(const std::string& path);
-    void LoadGLTFModel(const VulkanReferences& ref, const std::string& path);
+
+    void CreateFromGLTFPrimitive(const VulkanReferences&, ShaderPipeline* pbrShader, const vector<ShaderParameter::MParameter>& pbrMParams, int textureParamStartIndex, const tinygltf::Model& model, const tinygltf::Primitive& prim, bool isStorageBuffer = false);
+    void LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::string& path);
+    void LoadGLTFPrimitive(const tinygltf::Model& model, const tinygltf::Primitive& prim, bool accountForMultiplePrimitives);
+
 
     vector<Vertex> vertices;
     vector<uint32_t> indices;
@@ -82,9 +108,10 @@ private:
     bool isStorageBuffer;
 };
 
-struct PPBRInfo {
+// Should be uniform
+struct UPBRInfo {
     vec4 albedoMult;
-    bool hasAlbedoTexture;
-    bool hasMetallicRoughnessTexture;
-    bool hasAOTexture;
+    bool hasAlbedoTex;
+    bool hasMetallicRoughnessTex;
+    bool hasAOTex;
 };

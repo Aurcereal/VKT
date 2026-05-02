@@ -7,6 +7,7 @@ using namespace std;
 
 using WDescriptorSet = std::variant<vk::DescriptorImageInfo, vk::DescriptorBufferInfo>;
 
+// TODO: should be WShaderPipeline
 void Material::Create(WPipeline* pipeline, const VulkanReferences& ref, const vector<ShaderParameter::MParameter>& parameters, int duplicationCount) {
     this->pipeline = pipeline;
     this->duplicationCount = duplicationCount;
@@ -30,10 +31,13 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
     descriptorSets = ref.device.allocateDescriptorSets(allocateInfo);
     assert(descriptorSets.size() == duplicationCount);
 
+    vector<void*> mallocData;
+    vk::DescriptorImageInfo* aPtr;
+
     // Configure descriptor sets
     for (size_t i = 0; i < layouts.size(); i++) {
         vector<WDescriptorSet> ss;
-        ss.reserve(parameters.size()*3); // IMPORTANT since we have pointers to vectors (why mult 3 htough?)
+        ss.reserve(parameters.size()*12); // IMPORTANT since we have pointers to vectors, 12 since texture array gives multiple descriptors
         vector<vk::WriteDescriptorSet> ssWriters;
         for (uint j = 0; j < parameters.size(); j++) {
             auto& param = parameters[j];
@@ -94,7 +98,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     });
                 break;
 
-            case ShaderParameter::Type::SAMPLER:
+            case ShaderParameter::Type::COMBINED_SAMPLER:
                 ss.push_back({
                      vk::DescriptorImageInfo{
                         .sampler = param.sampler.texture->GetSampler(),
@@ -111,7 +115,27 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     .pImageInfo = &std::get<vk::DescriptorImageInfo>(ss[ss.size() - 1])
                 });
                 break;
-
+            case ShaderParameter::Type::COMBINED_SAMPLER_ARRAY:
+                mallocData.push_back(malloc(param.samplers.textures->size() * sizeof(vk::DescriptorImageInfo)));
+                aPtr = static_cast<vk::DescriptorImageInfo*>(*(--mallocData.end()));
+                for (int texInd = 0; texInd < param.samplers.textures->size(); texInd++) {
+                    aPtr[texInd] = {
+                         vk::DescriptorImageInfo{
+                            .sampler = (*param.samplers.textures)[texInd].GetSampler(),
+                            .imageView = (*param.samplers.textures)[texInd].view,
+                            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal // ASSUMING READONLY TEXTURE TODO: MAYBE CHANGE
+                    }};
+                }
+                
+                ssWriters.push_back({
+                    .dstSet = descriptorSets[i],
+                    .dstBinding = j,
+                    .dstArrayElement = 0,
+                    .descriptorCount = static_cast<uint32_t>(param.samplers.textures->size()),
+                    .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                    .pImageInfo = aPtr
+                    });
+                break;
             case ShaderParameter::Type::BUFFER:
                 ss.push_back(
                     vk::DescriptorBufferInfo{
@@ -150,5 +174,9 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
         }
 
         ref.device.updateDescriptorSets(ssWriters, {});
+    }
+
+    for (void* data : mallocData) {
+        free(data);
     }
 }

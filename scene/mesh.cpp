@@ -1,8 +1,8 @@
 #include "mesh.h"
 #include "tiny_gltf.h"
 #include <iostream>
-#include "tiny_obj_loader.h"
 #include <glm/gtc/type_ptr.hpp>
+#include "tiny_obj_loader.h"
 
 void Mesh::CreateFromOBJFile(const VulkanReferences& ref, const std::string& path, bool isStorageBuffer) {
     vertices.clear();
@@ -12,19 +12,13 @@ void Mesh::CreateFromOBJFile(const VulkanReferences& ref, const std::string& pat
     LoadOBJModel(path);
     CreateBuffers(ref);
 }
-void Mesh::CreateFromGLTFFile(const VulkanReferences& ref, const std::string& path, ShaderPipeline* pbrShader, const vector<ShaderParameter::MParameter>& pbrMParams, int textureParamsStartIndex, bool isStorageBuffer) {
+void Mesh::CreateFromGLTFFile(const VulkanReferences& ref, const std::string& path, bool isStorageBuffer) {
     vertices.clear();
     indices.clear();
     this->isStorageBuffer = isStorageBuffer;
 
-    LoadGLTFModel(ref, path);
+    LoadGLTFModelAndTextures(ref, path);
     CreateBuffers(ref);
-
-    vector newMParams = pbrMParams;
-    if(baseColor) newMParams[textureParamsStartIndex + 0] = ShaderParameter::MParameter(ShaderParameter::USampler{ .texture = baseColor.get() });
-    if(metallicRoughness) newMParams[textureParamsStartIndex + 1] = ShaderParameter::MParameter(ShaderParameter::USampler{ .texture = metallicRoughness.get() });
-    if(aoTexture) newMParams[textureParamsStartIndex + 2] = ShaderParameter::MParameter(ShaderParameter::USampler{ .texture = aoTexture.get()});
-    mat.Create(pbrShader, ref, newMParams);
 }
 void Mesh::CreateFromArrays(const VulkanReferences& ref, const vector<vec3>& positions, const vector<vec3>& colors, const vector<vec3>& normals, const vector<uint32_t>& indices, bool isStorageBuffer) {
     this->vertices.clear();
@@ -44,6 +38,33 @@ void Mesh::CreateFromArrays(const VulkanReferences& ref, const vector<vec3>& pos
     }
 
     CreateBuffers(ref);
+}
+
+uPtr<vector<Mesh>> Mesh::CreatePrimitiveMeshesFromGLTFFile(const VulkanReferences& ref, const std::string& path, ShaderPipeline* pbrShader, const vector<ShaderParameter::MParameter>& pbrMParams, int textureParamsStartIndex, bool isStorageBuffer)
+{
+    tinygltf::Model model;
+    tinygltf::TinyGLTF loader;
+    std::string err;
+    std::string warn;
+
+    bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, path);
+
+    if (!warn.empty()) 
+        std::cerr << "Warn: " << warn << std::endl;
+    if (!err.empty()) 
+        std::cerr << "Err: " << err << std::endl;
+    if (!ret)
+        std::cerr << "Failed to parse gltf of name " << path << " - remember gltf needs LoadASCII glb needs LoadBinary " << std::endl;
+
+    uPtr<vector<Mesh>> meshes = mkU<vector<Mesh>>();
+    for (const tinygltf::Mesh& mesh : model.meshes) {
+        for (const tinygltf::Primitive& prim : mesh.primitives) {
+            meshes->emplace_back();
+            (--meshes->end())->CreateFromGLTFPrimitive(ref, pbrShader, pbrMParams, textureParamsStartIndex, model, prim, isStorageBuffer);
+        }
+    }
+
+    return std::move(meshes);
 }
 
 void Mesh::GetPositions(vector<vec3>* pPositions) const {   
@@ -152,14 +173,14 @@ void GetGLTFIndices(const tinygltf::Model& model, const tinygltf::Primitive& pri
     }
 }
 
-void Mesh::LoadGLTFModel(const VulkanReferences& ref, const std::string& path) {
+void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::string& path) {
     assert(vertices.size() == 0 && indices.size() == 0);
 
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
     std::string err;
     std::string warn;
-   
+
     bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, path);
 
     if (!warn.empty()) {
@@ -172,13 +193,112 @@ void Mesh::LoadGLTFModel(const VulkanReferences& ref, const std::string& path) {
         std::cerr << "Failed to parse gltf of name " << path << " - remember gltf needs LoadASCII glb needs LoadBinary " << std::endl;
     }
 
-    // Assume 1 for now
-    const tinygltf::Primitive& prim = model.meshes[0].primitives[0];
+    multiPrimitivePBR = mkU<MultiPrimitivePBRInfo>();
+    for (const tinygltf::Mesh& mesh : model.meshes) {
+        for (const tinygltf::Primitive& prim : mesh.primitives) {
+            LoadGLTFPrimitive(model, prim, true);
+        }
+    }
+
+    indexCount = indices.size();
+    assert(indexCount == multiPrimitivePBR->triToMaterialIndex.size() / 3);
+
+    // Materials
+    for (const tinygltf::Material& mat : model.materials) {
+        const auto& pbr = mat.pbrMetallicRoughness;
+
+        multiPrimitivePBR->baseColorMult = pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data()));
+
+        if (pbr.baseColorTexture.index >= 0) {
+            const auto& img = model.images[model.textures[pbr.baseColorTexture.index].source];
+            multiPrimitivePBR->baseColorTexs.push_back({});
+            multiPrimitivePBR->baseColorTexs[multiPrimitivePBR->baseColorTexs.size() - 1].CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
+        }
+        if (pbr.metallicRoughnessTexture.index >= 0) {
+            const auto& img = model.images[model.textures[pbr.metallicRoughnessTexture.index].source];
+            multiPrimitivePBR->metallicRoughnessTexs.push_back({});
+            (--multiPrimitivePBR->metallicRoughnessTexs.end())->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
+        }
+        if (mat.occlusionTexture.index >= 0) {
+            const auto& img = model.images[model.textures[mat.occlusionTexture.index].source];
+            multiPrimitivePBR->aoTexs.push_back({});
+            (--multiPrimitivePBR->aoTexs.end())->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
+        }
+    }
+
+    // Debug test
+    vector<int> testVec;
+    if (multiPrimitivePBR->baseColorTexs.size() != 0) testVec.push_back(multiPrimitivePBR->baseColorTexs.size());
+    if (multiPrimitivePBR->metallicRoughnessTexs.size() != 0) testVec.push_back(multiPrimitivePBR->metallicRoughnessTexs.size());
+    if (multiPrimitivePBR->aoTexs.size() != 0) testVec.push_back(multiPrimitivePBR->aoTexs.size());
+    for (int i = 0; i < testVec.size() - 1; i++) {
+        assert(testVec[i] == testVec[i + 1]);
+    }
+}
+
+void Mesh::CreateFromGLTFPrimitive(const VulkanReferences& ref, ShaderPipeline* pbrShader, const vector<ShaderParameter::MParameter>& pbrMParams, int textureParamsStartIndex, const tinygltf::Model& model, const tinygltf::Primitive& prim, bool isStorageBuffer) {
+    vertices.clear();
+    indices.clear();
+    this->isStorageBuffer = isStorageBuffer;
+
+    LoadGLTFPrimitive(model, prim, false);
+    indexCount = indices.size();
+
+    CreateBuffers(ref);
+
+    // Material
+    vector newMParams = pbrMParams;
+    const tinygltf::Material& mat = model.materials[prim.material];
+
+    const auto& pbr = mat.pbrMetallicRoughness;
+    singlePrimitivePBR = mkU<SinglePrimitivePBRInfo>();
+    singlePrimitivePBR->baseColorMult = pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data()));
+
+    UPBRInfo pbrInfo = {
+        .albedoMult = singlePrimitivePBR->baseColorMult,
+        .hasAlbedoTex = false,
+        .hasMetallicRoughnessTex = false,
+        .hasAOTex = false
+    };
+    
+    if (pbr.baseColorTexture.index >= 0) {
+        const auto& img = model.images[model.textures[pbr.baseColorTexture.index].source];
+        singlePrimitivePBR->baseColorTex.CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
+        newMParams[textureParamsStartIndex + 0] = ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{ .texture = &singlePrimitivePBR->baseColorTex });
+        pbrInfo.hasAlbedoTex = true;
+    }
+    if (pbr.metallicRoughnessTexture.index >= 0) {
+        const auto& img = model.images[model.textures[pbr.metallicRoughnessTexture.index].source];
+        singlePrimitivePBR->metallicRoughnessTex.CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
+        newMParams[textureParamsStartIndex + 1] = ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{ .texture = &singlePrimitivePBR->metallicRoughnessTex });
+        pbrInfo.hasMetallicRoughnessTex = true;
+    }
+    if (mat.occlusionTexture.index >= 0) {
+        const auto& img = model.images[model.textures[mat.occlusionTexture.index].source];
+        singlePrimitivePBR->aoTex.CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
+        newMParams[textureParamsStartIndex + 2] = ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{ .texture = &singlePrimitivePBR->aoTex });
+        pbrInfo.hasAOTex = true;
+    }
+
+    singlePrimitivePBR->uPbrInfo.emplace_back();
+    singlePrimitivePBR->uPbrInfo.back().Create(ref, sizeof(UPBRInfo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    memcpy(singlePrimitivePBR->uPbrInfo.back().MapMemory(), &pbrInfo, sizeof(UPBRInfo));
+    newMParams[textureParamsStartIndex + 3] = ShaderParameter::MParameter(ShaderParameter::UUniform{ .uniformBuffers = &singlePrimitivePBR->uPbrInfo });
+
+    // Finally create material
+    singlePrimitivePBR->mat.Create(pbrShader, ref, newMParams);
+}
+
+void Mesh::LoadGLTFPrimitive(const tinygltf::Model& model, const tinygltf::Primitive& prim, bool accountForMultiplePrimitives) {
+    assert(accountForMultiplePrimitives || (vertices.size() + indices.size()) == 0);
+    assert(!accountForMultiplePrimitives || multiPrimitivePBR != nullptr);
+
+    uint32_t indexOffset = vertices.size();
 
     vector<float> positions;
     size_t positionCount = 0;
     if (prim.attributes.count("POSITION")) {
-        int cc; 
+        int cc;
         GetGLTFAttributes(model, prim, "POSITION", &positions, &cc, &positionCount);
         assert(cc == 3);
         assert(positionCount == positions.size() / 3);
@@ -195,7 +315,7 @@ void Mesh::LoadGLTFModel(const VulkanReferences& ref, const std::string& path) {
 
     for (size_t i = 0; i < positionCount; i++) {
         vertices.push_back(
-            Vertex {
+            Vertex{
                 .pos = vec3(
                     positions[i * 3 + 0],
                     positions[i * 3 + 1],
@@ -218,31 +338,12 @@ void Mesh::LoadGLTFModel(const VulkanReferences& ref, const std::string& path) {
     }
 
     // Indices
-    GetGLTFIndices(model, prim, &indices);
-
-    // Materials
-    const tinygltf::Material& mat = model.materials[prim.material];
-    const auto& pbr = mat.pbrMetallicRoughness;
-    
-    baseColorMult = pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data()));
-    
-    if (pbr.baseColorTexture.index >= 0) {
-        const auto& img = model.images[model.textures[pbr.baseColorTexture.index].source];
-        baseColor = mkU<WTexture>();
-        baseColor->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
+    vector<uint32_t> primIndices;
+    GetGLTFIndices(model, prim, &primIndices);
+    for (size_t i = 0; i < primIndices.size(); i++) {
+        indices.push_back(primIndices[i] + indexOffset);
+        if (accountForMultiplePrimitives && i % 3 == 0) multiPrimitivePBR->triToMaterialIndex.push_back(prim.material);
     }
-    if (pbr.metallicRoughnessTexture.index >= 0) {
-        const auto& img = model.images[model.textures[pbr.metallicRoughnessTexture.index].source];
-        metallicRoughness = mkU<WTexture>();
-        metallicRoughness->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
-    }
-    if (mat.occlusionTexture.index >= 0) {
-        const auto& img = model.images[model.textures[mat.occlusionTexture.index].source];
-        aoTexture = mkU<WTexture>();
-        aoTexture->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
-    }
-
-    indexCount = indices.size();
 }
 
 void Mesh::LoadOBJModel(const std::string& path) {

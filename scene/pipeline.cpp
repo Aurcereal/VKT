@@ -26,7 +26,7 @@ using namespace std;
 }
 
 void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, const vk::Format* colorFormats, const vk::Format& depthFormat, const vector<ShaderParameter::SParameter>& parameters, bool depthEnabled, bool flipFaces, bool usePushConstants, vk::DeviceSize pushConstantSize) {
-    WPipeline::Create(usePushConstants, pushConstantSize);
+    WPipeline::Create(false, usePushConstants, pushConstantSize);
     
     // Create our shader uniforms/descriptor set layouts
     CreateDescriptorSetLayout(ref, parameters);
@@ -149,10 +149,18 @@ void ShaderPipeline::Create(const VulkanReferences& ref, const string& path, con
         .pAttachments = &colorBlendAttachment
     };
 
+    vk::PushConstantRange pushConstantRange = {
+        .stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+        .offset = 0,
+        .size = static_cast<uint32_t>(pushConstantSize)
+    };
+
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo = {
         .setLayoutCount = 1,
         .pSetLayouts = &*descriptorSetLayout,
-        .pushConstantRangeCount = 0 // different way of pushing dynamic vals to shaders
+
+        .pushConstantRangeCount = usePushConstants ? 1u : 0u,
+        .pPushConstantRanges = &pushConstantRange
     };
     pipelineLayout = vk::raii::PipelineLayout(ref.device, pipelineLayoutInfo);
 
@@ -198,6 +206,7 @@ void WPipeline::CreateDescriptorSetLayout(const VulkanReferences& ref, const vec
     // Layout of descriptor set (pointers to uniform data)
     vector<vk::DescriptorSetLayoutBinding> bindingLayouts;
     for (int i = 0; i < parameters.size(); i++) {
+        int count = 1;
         vk::DescriptorType dType;
         const auto& param = parameters[i];
         switch (param.type) {
@@ -205,8 +214,11 @@ void WPipeline::CreateDescriptorSetLayout(const VulkanReferences& ref, const vec
             dType = vk::DescriptorType::eUniformBuffer; break;
         case ShaderParameter::Type::DYNAMIC_UNIFORM:
             dType = vk::DescriptorType::eUniformBufferDynamic; break;
-        case ShaderParameter::Type::SAMPLER:
+        case ShaderParameter::Type::COMBINED_SAMPLER:
             dType = vk::DescriptorType::eCombinedImageSampler;  break;
+        case ShaderParameter::Type::COMBINED_SAMPLER_ARRAY:
+            count = 12;
+            dType = vk::DescriptorType::eCombinedImageSampler; break;
         case ShaderParameter::Type::BUFFER:
             dType = vk::DescriptorType::eStorageBuffer; break;
         case ShaderParameter::Type::STORAGE_TEXTURE:
@@ -214,7 +226,7 @@ void WPipeline::CreateDescriptorSetLayout(const VulkanReferences& ref, const vec
         default:
             assert(false); break;
         }
-        bindingLayouts.emplace_back(i, dType, 1, param.visibility);
+        bindingLayouts.emplace_back(i, dType, count, param.visibility);
     }
 
     vk::DescriptorSetLayoutCreateInfo layoutInfo = {
@@ -245,7 +257,7 @@ void ShaderPipeline::BindMaterialDescriptorSets(const VulkanReferences& ref, con
 
 void ComputePipeline::Create(const VulkanReferences& ref, const string& path, const vector<ShaderParameter::SParameter>& parameters, const vector<ShaderParameter::MParameter>& parameterData, uvec3 workGroupSize, bool usePushConstants, vk::DeviceSize pushConstantSize) {
     this->workGroupSize = workGroupSize;
-    WPipeline::Create(usePushConstants, pushConstantSize);
+    WPipeline::Create(true, usePushConstants, pushConstantSize);
 
     //
     auto computeModule = CreateShaderModule(ref, path);
@@ -306,15 +318,16 @@ void ComputePipeline::EnqueueDispatch(ComputeDispatcher* dispatcher, uvec3 total
     dispatcher->cmd.dispatch(workGroupCount.x, workGroupCount.y, workGroupCount.z);
 }
 
-void WPipeline::Create(bool usePushConstants, vk::DeviceSize pushConstantSize) {
+void WPipeline::Create(bool isComputeShader, bool usePushConstants, vk::DeviceSize pushConstantSize) {
     this->usePushConstants = usePushConstants;
     this->pushConstantsSize = pushConstantSize;
+    this->isComputeShader = isComputeShader;
 }
 
 void WPipeline::EnqueuePushConstants(vk::raii::CommandBuffer* cmd, void* data) {
     // todo: use modern but requires generics?
     assert(pushConstantsSize != 0);
-    vkCmdPushConstants(**cmd, *pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, pushConstantsSize, data);
+    vkCmdPushConstants(**cmd, *pipelineLayout, isComputeShader ? VK_SHADER_STAGE_COMPUTE_BIT : VK_SHADER_STAGE_ALL_GRAPHICS, 0, pushConstantsSize, data);
 }
 
 void ComputePipeline::EnqueueComputeBarrier(ComputeDispatcher* dispatcher, vk::AccessFlags srcAccess, vk::AccessFlags dstAccess) {

@@ -92,6 +92,7 @@ private:
     vector<vk::raii::ImageView> swapChainImageViews;
 
     ShaderPipeline shaderPipeline;
+    ShaderPipeline gltfPrimPBRShader;
 
     ShaderPipeline skyboxShader;
     Material skyboxMaterial;
@@ -118,7 +119,7 @@ private:
     Mesh chairMesh;
     Mesh cubeMesh;
     Mesh testRoom;
-    Mesh tent;
+    uPtr<vector<Mesh>> tentPrims;
 
     vector<WBuffer> uniformBuffers; // Memory for each frame in flight so each frame can have diff uniform vals
     vector<WBuffer> uEntityBuffers;
@@ -395,7 +396,8 @@ private:
             vk::PhysicalDeviceVulkan13Features, // C 
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT, // D
             // vk::PhysicalDeviceShaderAtomicFloatFeaturesEXT, // ATOMIC 
-            vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR
+            vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR,
+            vk::PhysicalDeviceDescriptorIndexingFeatures
         >
             featureChain = {
                 {.features = {.geometryShader = true, .samplerAnisotropy = true }}, // constructor for A,
@@ -403,7 +405,8 @@ private:
                 {.synchronization2 = true, .dynamicRendering = true}, // constructor for C, dynamic rendering is a modern simplification
                 {.extendedDynamicState = true},
                 // {.shaderBufferFloat32AtomicAdd = true}, // ATOMIC 
-                {.computeDerivativeGroupQuads = true}
+                {.computeDerivativeGroupQuads = true},
+                {.shaderSampledImageArrayNonUniformIndexing = true, .descriptorBindingPartiallyBound = true, .descriptorBindingVariableDescriptorCount = true, .runtimeDescriptorArray = true}
         };
 
         vk::DeviceCreateInfo deviceCreateInfo{
@@ -614,7 +617,6 @@ private:
             uniformBuffers.emplace_back();
             uniformBuffers.back().Create(coreReferences, sizeof(UCamera), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
             uniformBuffers.back().MapMemory();
-            // Persistent mapping
 
             uEntityBuffers.emplace_back();
             uEntityBuffers.back().Create(coreReferences, 2 * ceilToNearest(sizeof(UEntity), coreReferences.minUniformBufferOffsetAlignment), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -638,11 +640,11 @@ private:
     void CreateDescriptorPool() {
         // Inadequate descriptor pools may not be caught by validation layers
         std::array poolSize = {
-            vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 100 * MAX_FRAMES_IN_FLIGHT),
-            vk::DescriptorPoolSize(vk::DescriptorType::eUniformBufferDynamic, 25 * MAX_FRAMES_IN_FLIGHT),
-            vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, 100 * MAX_FRAMES_IN_FLIGHT),
-            vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 5 * MAX_FRAMES_IN_FLIGHT),
-            vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, 5 * MAX_FRAMES_IN_FLIGHT),
+            vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 30*100 * MAX_FRAMES_IN_FLIGHT),
+            vk::DescriptorPoolSize(vk::DescriptorType::eUniformBufferDynamic, 30*25 * MAX_FRAMES_IN_FLIGHT),
+            vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, 30*100 * MAX_FRAMES_IN_FLIGHT),
+            vk::DescriptorPoolSize(vk::DescriptorType::eStorageBuffer, 30*5 * MAX_FRAMES_IN_FLIGHT),
+            vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, 30*5 * MAX_FRAMES_IN_FLIGHT),
         };
 
         // Pool Sizes denotes how many of each specific descriptor type we can allocate
@@ -651,7 +653,7 @@ private:
 
         vk::DescriptorPoolCreateInfo poolInfo = {
             .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            .maxSets = MAX_FRAMES_IN_FLIGHT * 100,
+            .maxSets = MAX_FRAMES_IN_FLIGHT * 500,
 
             .poolSizeCount = poolSize.size(),
             .pPoolSizes = poolSize.data()
@@ -783,11 +785,11 @@ private:
         // Skybox
         vector skyboxShaderParams = {
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
         };
         vector skyboxMaterialParams = {
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
         };
         skyboxShader.Create(coreReferences, "shaders/skybox.spv", &swapSurfaceFormat.format, GetDepthFormat(), skyboxShaderParams, false, true);
         skyboxMaterial.Create(&skyboxShader, coreReferences, skyboxMaterialParams);
@@ -815,15 +817,13 @@ private:
         vector shaderParams = {
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::DYNAMIC_UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eFragment },
 
         };
@@ -839,35 +839,70 @@ private:
                     )
                 )
             }),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testRoomTexture}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &metallic}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
-            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.vertexBuffer}),
-            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.indexBuffer}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),// &writtenCubemap }),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testRoomTexture}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &metallic}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &ao}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),// &writtenCubemap }),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->shCoefficients}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &pc.probeVolume->octahedralDepthMap}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
-        shaderPipeline.Create(coreReferences, "shaders/pbr-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams, true, false, true, sizeof(PPBRInfo));
+        shaderPipeline.Create(coreReferences, "shaders/pbr-obj.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams, true, false);
         testMaterial.Create(&shaderPipeline, coreReferences, materialParams);
 
-        tent.CreateFromGLTFFile(coreReferences, "models/tent.glb", &shaderPipeline, materialParams, 2, false);
+        vector gltfPrimSParams = {
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::DYNAMIC_UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eFragment },
+
+        };
+        vector gltfPrimAbstractMParams = {
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
+            ShaderParameter::MParameter(ShaderParameter::UDynamicUniform {
+                .buffers = &uEntityBuffers,
+                .singleObjectSize =
+                static_cast<vk::DeviceSize>(
+                    ceilToNearest(
+                        sizeof(UEntity),
+                        coreReferences.minUniformBufferOffsetAlignment
+                    )
+                )
+            }),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}), // optional, so we have placeholders
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}),
+            ShaderParameter::MParameter(ShaderParameter::UUniform {}), // not optional
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->shCoefficients}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
+        };
+        gltfPrimPBRShader.Create(coreReferences, "shaders/pbr-gltf-prim.spv", &swapSurfaceFormat.format, GetDepthFormat(), gltfPrimSParams, true, false);
+        tentPrims = Mesh::CreatePrimitiveMeshesFromGLTFFile(coreReferences, "models/Sponza.glb", &gltfPrimPBRShader, gltfPrimAbstractMParams, 2, false);
 
         // Reflect Shader & Material
         vector reflectShaderParams = {
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::DYNAMIC_UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
         };
         vector reflectMaterialParams = {
@@ -883,14 +918,14 @@ private:
                 )
             }),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uRaytraceSceneBuffer}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.vertexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.indexBuffer}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->nodeBuffer}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->triangleRedirectionBuffer}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testRoomTexture}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &metallic}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testRoomTexture}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &metallic}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH() })
         };
         reflectShader.Create(coreReferences, "shaders/reflect.spv", &swapSurfaceFormat.format, GetDepthFormat(), reflectShaderParams);
@@ -909,15 +944,13 @@ private:
                     )
                 )
             }),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &whiteTexture}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &metallic}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &ao}),
-            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.vertexBuffer}),
-            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom.indexBuffer}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &testCubeMap}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &metallic}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &ao}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->shCoefficients}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &pc.probeVolume->octahedralDepthMap}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
         blobMaterial.Create(&shaderPipeline, coreReferences, blobMaterialParams);
@@ -936,7 +969,7 @@ private:
             ShaderParameter::SParameter{.type = ShaderParameter::Type::DYNAMIC_UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eFragment },
             ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
         };
         vector depthProbeMaterialParams = {
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
@@ -946,7 +979,7 @@ private:
             }),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->depthBuffer}),
-            ShaderParameter::MParameter(ShaderParameter::USampler {.texture = &pc.probeVolume->octahedralDepthMap}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
         };
         depthOrbShader.Create(coreReferences, "shaders/display-probe-depth-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), depthProbeShaderParams);
         depthOrbMaterial.Create(&depthOrbShader, coreReferences, depthProbeMaterialParams);
@@ -1060,9 +1093,11 @@ private:
         renderPass.EnqueueSetMaterial(testMaterial, currFrameIndex, { 0 });
         renderPass.EnqueueDraw(testRoom);
         //renderPass.EnqueueSetMaterial(blobMaterial, currFrameIndex, { 1 });
-        renderPass.EnqueueSetMaterial(tent.mat, currFrameIndex, { 1 });
-        renderPass.EnqueueDraw(tent, true);
-
+        for (const Mesh& tentPrim : *tentPrims) {
+            renderPass.EnqueueSetMaterial(tentPrim.singlePrimitivePBR->mat, currFrameIndex, { 1 });
+            renderPass.EnqueueDraw(tentPrim);
+        }
+        
         if (showDebugProbes) {
             pc.probeVolume->DrawDebugProbeVolume(&renderPass, sphereMesh, probeOrbMaterial, currFrameIndex);
         }

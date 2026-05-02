@@ -11,7 +11,8 @@ namespace ShaderParameter {
 	enum class Type {
 		UNIFORM,
 		DYNAMIC_UNIFORM,
-		SAMPLER,
+		COMBINED_SAMPLER,
+		COMBINED_SAMPLER_ARRAY,
 		BUFFER,
 		STORAGE_TEXTURE
 	};
@@ -26,8 +27,12 @@ namespace ShaderParameter {
 		vk::DeviceSize singleObjectSize;
 	};
 
-	struct USampler {
+	struct UCombinedSampler {
 		WTexture* texture;
+	};
+
+	struct UCombinedSamplerArray {
+		vector<WTexture>* textures;
 	};
 
 	struct UBuffer {
@@ -43,14 +48,16 @@ namespace ShaderParameter {
 		union {
 			UUniform uniform;
 			UDynamicUniform dynamicUniform;
-			USampler sampler;
+			UCombinedSampler sampler;
+			UCombinedSamplerArray samplers;
 			UBuffer buffer;
 			UStorageTexture storageTexture;
 		};
 
 		inline MParameter(UUniform u) : type(Type::UNIFORM), uniform(u) {}
 		inline MParameter(UDynamicUniform u) : type(Type::DYNAMIC_UNIFORM), dynamicUniform(u) {}
-		inline MParameter(USampler s) : type(Type::SAMPLER), sampler(s) {}
+		inline MParameter(UCombinedSampler s) : type(Type::COMBINED_SAMPLER), sampler(s) {}
+		inline MParameter(UCombinedSamplerArray s) : type(Type::COMBINED_SAMPLER_ARRAY), samplers(s) {}
 		inline MParameter(UBuffer b) : type(Type::BUFFER), buffer(b) {}
 		inline MParameter(UStorageTexture s) : type(Type::STORAGE_TEXTURE), storageTexture(s) {}
 

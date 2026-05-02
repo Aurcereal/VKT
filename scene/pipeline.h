@@ -12,7 +12,7 @@ using namespace glm;
 
 class WPipeline {
 public:
-    void Create(bool usePushConstants = false, vk::DeviceSize pushConstantSize = 0);
+    void Create(bool isComputeShader, bool usePushConstants = false, vk::DeviceSize pushConstantSize = 0);
     void EnqueuePushConstants(vk::raii::CommandBuffer*, void* data);
     vk::raii::DescriptorSetLayout descriptorSetLayout = nullptr;
 protected:
@@ -24,6 +24,7 @@ protected:
 private:
     bool usePushConstants = false;
     vk::DeviceSize pushConstantsSize;
+    bool isComputeShader;
 };
 
 class ShaderPipeline : public WPipeline {

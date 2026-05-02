@@ -87,11 +87,11 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 
 	// Create Skybox Probe Baker
 	vector skyShaParams = {
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute},
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute},
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute},
 	};
 	vector skyMatParams = {
-		ShaderParameter::MParameter(ShaderParameter::USampler{.texture = skybox}),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{.texture = skybox}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &shScratchBuffer}),
 	};
 	bakeSkyboxProbe.Create(*ref, "shaders/spherical-harmonics-sky.spv", skyShaParams, skyMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PSkyboxBakeInfo));
@@ -146,14 +146,14 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	vector envShaParams = {
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
@@ -162,14 +162,14 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	vector envMatParams = {
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uniformBuffers}),
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uRaytracedSceneBuffer}),
-		ShaderParameter::MParameter(ShaderParameter::USampler {.texture = testCubeMap}),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = testCubeMap}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom->vertexBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom->indexBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->triangleRedirectionBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->nodeBuffer}),
-		ShaderParameter::MParameter(ShaderParameter::USampler {.texture = testRoomTexture}),
-		ShaderParameter::MParameter(ShaderParameter::USampler {.texture = metallicRoughness}),
-		ShaderParameter::MParameter(ShaderParameter::USampler {.texture = ao}),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = testRoomTexture}),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = metallicRoughness}),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = ao}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = skyboxSh.get() }),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->shCoefficients}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->depthBuffer}),

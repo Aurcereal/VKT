@@ -20,12 +20,12 @@ void GIManager::GenerateSHCoefficients(WTexture* skybox) {
 	shCoefficients.CreateDeviceLocalFromData(*ref, byteSize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc, zeroData.data());
 
 	vector sParams = { // ATOMIC
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute},
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute},
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute},
 	};
 
 	vector mParams = {
-		ShaderParameter::MParameter(ShaderParameter::USampler{.texture = skybox}),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{.texture = skybox}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &shCoefficients}),
 	};
 
