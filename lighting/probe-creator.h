@@ -30,7 +30,7 @@ struct ProbeVolume {
 
 class ProbeCreator {
 public:
-	void Create(const VulkanReferences*, WTexture* skybox, vector<WBuffer>* uniformBuffers, vector<WBuffer>* uRaytracedSceneBuffer, WTexture* testCubeMap, Mesh* testRoom, WTexture* testRoomTexture, WTexture* metallicRoughness, WTexture* ao, const BVHGPU*,
+	void Create(const VulkanReferences*, WTexture* skybox, vector<WBuffer>* uniformBuffers, vector<WBuffer>* uRaytracedSceneBuffer, Mesh* raytraceMesh, const BVHGPU*,
 		uvec3 probeCounts, vec3 boundingBoxOrigin, vec3 boundingBoxSize);
 	uPtr<ProbeVolume> probeVolume;
 	

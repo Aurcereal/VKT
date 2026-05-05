@@ -77,14 +77,24 @@ void BVHBuilder::ChooseSplitPlane(const BVHNode* node, int* pAxis, float* pPos) 
 float BVHBuilder::ChooseSplitPlaneSAH(const BVHNode* node, int* pAxis, float* pPos) {
 	assert(node->triangleCount > 0);
 
+	// Get centoroid bound
+	vec3 centroidLowExtent = vec3(std::numeric_limits<float>::max());
+	vec3 centroidHighExtent = vec3(std::numeric_limits<float>::min());
+	uint32_t start = node->childStartIndex; uint32_t end = node->childStartIndex + node->triangleCount;
+	for (uint32_t i = start; i < end; i++) {
+		const Triangle& t = GetTriangle(i);
+		centroidLowExtent = min(centroidLowExtent, t.centroid);
+		centroidHighExtent = max(centroidHighExtent, t.centroid);
+	}
+
 	int currAxis; float currPos;
 	float currCost = -1.0f;
 
-	const int divisions = 16;
+	const int divisions = 8;
 	for (int a = 0; a < 3; a++) {
-		float len = node->highExtent[a] - node->lowExtent[a];
+		float len = centroidHighExtent[a] - centroidLowExtent[a];
 		for (int split = 1; split < divisions; split++) {
-			float tryPos = node->lowExtent[a] + len * (1.0f * split) / (1.0f * divisions);
+			float tryPos = centroidLowExtent[a] + len * (1.0f * split) / (1.0f * divisions);
 
 			float newCost = EvaluateSAH(node, a, tryPos);
 			if (currCost < 0.0f || newCost < currCost) {
@@ -106,15 +116,16 @@ uint leafCount = 0;
 
 #define SAH
 
-void BVHBuilder::Subdivide(BVHNode* node) {
+void BVHBuilder::Subdivide(BVHNode* node, int depth) {
 #ifdef SAH
 	// Get current cost
 	float currCost = node->triangleCount * boundingBoxArea(node->lowExtent, node->highExtent);
 
 	// Get split plane & return if it's not worth it
 	int splitAxis;  float splitPos;
-	if (ChooseSplitPlaneSAH(node, &splitAxis, &splitPos) >= currCost) {
+	if (depth >= 40 || node->triangleCount <= 60 || ChooseSplitPlaneSAH(node, &splitAxis, &splitPos) >= currCost) {
 		++leafCount;
+		std::cout << "MADE LEAF - \t Tri Count: " << node->triangleCount << "\t Depth: " << depth << std::endl;
 		return;
 	}
 #else
@@ -156,6 +167,8 @@ void BVHBuilder::Subdivide(BVHNode* node) {
 	rightNode->childStartIndex = i;
 	rightNode->triangleCount = node->childStartIndex + node->triangleCount - i;
 
+	assert(leftNode->triangleCount > 0 && rightNode->triangleCount > 0);
+
 	UpdateNodeBounds(leftNode);
 	UpdateNodeBounds(rightNode);
 
@@ -164,8 +177,8 @@ void BVHBuilder::Subdivide(BVHNode* node) {
 	node->childStartIndex = bvh->bvhNodes.size() - 2;
 
 	// Recurse
-	Subdivide(leftNode);
-	Subdivide(rightNode);
+	Subdivide(leftNode, depth + 1);
+	Subdivide(rightNode, depth + 1);
 }
 
 void BVHBuilder::UpdateNodeBounds(BVHNode* node) {
@@ -208,7 +221,7 @@ uPtr<BVH> BVHBuilder::BuildBVH(const std::vector<vec3>& vertices, const std::vec
 	BVHNode* root = NewNode();
 	root->childStartIndex = 0; root->triangleCount = triangles.size();
 	UpdateNodeBounds(root);
-	Subdivide(root);
+	Subdivide(root, 0);
 
 	std::cout << "BVH Node Count: " << bvh->bvhNodes.size() << std::endl;
 	std::cout << "Leaf Count: " << leafCount << std::endl;

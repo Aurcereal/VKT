@@ -73,7 +73,7 @@ WBuffer* ProbeCreator::GetSkyboxSH() {
 }
 
 // TODO: all these params def annoying so not having it, need to have some struct to represent the world
-void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<WBuffer>* uniformBuffers, vector<WBuffer>* uRaytracedSceneBuffer, WTexture* testCubeMap, Mesh* testRoom, WTexture* testRoomTexture, WTexture* metallicRoughness, WTexture* ao, const BVHGPU* bvh,
+void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<WBuffer>* uniformBuffers, vector<WBuffer>* uRaytracedSceneBuffer, Mesh* raytraceMesh, const BVHGPU* bvh,
 	uvec3 probeCounts, vec3 boundingBoxOrigin, vec3 boundingBoxSize) {
 	this->ref = ref;
 
@@ -151,9 +151,11 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
@@ -162,14 +164,16 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	vector envMatParams = {
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uniformBuffers}),
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uRaytracedSceneBuffer}),
-		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = testCubeMap}),
-		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom->vertexBuffer}),
-		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &testRoom->indexBuffer}),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = skybox}),
+		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->vertexBuffer}),
+		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->indexBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->triangleRedirectionBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->nodeBuffer}),
-		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = testRoomTexture}),
-		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = metallicRoughness}),
-		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = ao}),
+		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->multiPrimitivePBR->triToMaterialIndexBuffer}),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray {.textures = &raytraceMesh->multiPrimitivePBR->baseColorTexs}),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray {.textures = &raytraceMesh->multiPrimitivePBR->metallicRoughnessTexs}),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray {.textures = &raytraceMesh->multiPrimitivePBR->aoTexs}),
+		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &raytraceMesh->multiPrimitivePBR->uPbrInfo}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = skyboxSh.get() }),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->shCoefficients}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->depthBuffer}),
@@ -230,7 +234,7 @@ void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform)
 
 	// Bake all probes
 	uint32_t probeCount = probeCounts.x * probeCounts.y * probeCounts.z;
-	uint32_t bakeCount = 4096; // TODO: need even more maybe or sh improvement
+	uint32_t bakeCount = 400; // TODO: need even more maybe or sh improvement
 	uint32_t groupCount = ceilDiv(probeCount, GROUP_SIZE);
 	std::cout << "Probe Count: " << probeCount << " Group Count: " << groupCount << std::endl;
 
@@ -247,6 +251,12 @@ void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform)
 		bakeEnvironmentProbe.EnqueueComputeBarrier(&computeDispatcher, 
 			vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead, 
 			vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead);
+
+		if (i % 5 == 0 || i == bakeCount - 1) {
+			computeDispatcher.FinishRecordSubmit(*ref, true);
+			std::cout << "Baked " << i + 1 << "/" << bakeCount << std::endl;
+			computeDispatcher.StartRecord(*ref); // TODO: del
+		}
 	}
 
 	// Depth Buffer -> Texture

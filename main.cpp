@@ -119,7 +119,7 @@ private:
     Mesh chairMesh;
     Mesh cubeMesh;
     Mesh testRoom;
-    uPtr<vector<Mesh>> tentPrims;
+    uPtr<vector<Mesh>> sponzaPrims;
 
     vector<WBuffer> uniformBuffers; // Memory for each frame in flight so each frame can have diff uniform vals
     vector<WBuffer> uEntityBuffers;
@@ -624,7 +624,7 @@ private:
         }
 
         // Raytraced Scene
-        mat4 model = game.roomTransform;
+        mat4 model = game.raytraceSceneTransform;
         URaytracedScene raytracedScene = {
             .model = model,
             .invModel = inverse(model),
@@ -728,6 +728,7 @@ private:
     ProbeCreator pc;
     BVHManager bvhManager;
     uPtr<BVHGPU> bvh;
+    Mesh sponzaRaytraceMesh;
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
@@ -764,6 +765,7 @@ private:
         chairMesh.CreateFromOBJFile(coreReferences, "models/morrisChair.obj", true);
         cubeMesh.CreateFromOBJFile(coreReferences, "models/cube.obj");
         testRoom.CreateFromOBJFile(coreReferences, "models/testRoom.obj", true);
+        sponzaRaytraceMesh.CreateFromGLTFFile(coreReferences, "models/Sponza.glb", true);
         std::cout << "Test Room Index Count: " << testRoom.indexCount << std::endl;
         
         // Textures
@@ -800,12 +802,12 @@ private:
         GUIManager::RegisterUIFunction(std::bind(&TestGame::DrawUI, &game));
 
         // Build BVH
-        bvh = bvhManager.BuildBVH(coreReferences, testRoom);
+        bvh = bvhManager.BuildBVH(coreReferences, sponzaRaytraceMesh);
 
         // Bake Probes
         UpdateUniformBuffer(0);
         auto beforeProbeCreateTime = std::chrono::high_resolution_clock::now();
-        pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &uRaytraceSceneBuffer, &testCubeMap, &testRoom, &testRoomTexture, &metallic, &ao, bvh.get(),
+        pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &uRaytraceSceneBuffer, &sponzaRaytraceMesh, bvh.get(),
             // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
             uvec3(10, 5, 10), vec3(0), vec3(16.5, 10, 16.5));
         auto afterProbeCreateTime = std::chrono::high_resolution_clock::now();
@@ -888,7 +890,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
         gltfPrimPBRShader.Create(coreReferences, "shaders/pbr-gltf-prim.spv", &swapSurfaceFormat.format, GetDepthFormat(), gltfPrimSParams, true, false);
-        tentPrims = Mesh::CreatePrimitiveMeshesFromGLTFFile(coreReferences, "models/Sponza.glb", &gltfPrimPBRShader, gltfPrimAbstractMParams, 2, false);
+        sponzaPrims = Mesh::CreatePrimitiveMeshesFromGLTFFile(coreReferences, "models/Sponza.glb", &gltfPrimPBRShader, gltfPrimAbstractMParams, 2, false);
 
         // Reflect Shader & Material
         vector reflectShaderParams = {
@@ -1027,7 +1029,7 @@ private:
     void UpdateUniformBuffer(uint32_t currFrame) {
         vk::DeviceSize alignment = GetUniformAlignment<UEntity>(coreReferences);
         vector<UEntity> entities = { // todo: management of entity indices or smth
-            {.transform = game.roomTransform},
+            {.transform = game.raytraceSceneTransform},
             {.transform = game.ballTransform}
         };
         for (int i = 0; i < entities.size(); i++) {
@@ -1090,11 +1092,11 @@ private:
 #ifndef VBD
         renderPass.EnqueueSetMaterial(skyboxMaterial, currFrameIndex);
         renderPass.EnqueueDraw(cubeMesh);
-        renderPass.EnqueueSetMaterial(testMaterial, currFrameIndex, { 0 });
-        renderPass.EnqueueDraw(testRoom);
+        // renderPass.EnqueueSetMaterial(testMaterial, currFrameIndex, { 0 });
+        // renderPass.EnqueueDraw(testRoom);
         //renderPass.EnqueueSetMaterial(blobMaterial, currFrameIndex, { 1 });
-        for (const Mesh& tentPrim : *tentPrims) {
-            renderPass.EnqueueSetMaterial(tentPrim.singlePrimitivePBR->mat, currFrameIndex, { 1 });
+        for (const Mesh& tentPrim : *sponzaPrims) {
+            renderPass.EnqueueSetMaterial(tentPrim.singlePrimitivePBR->mat, currFrameIndex, { 0 });
             renderPass.EnqueueDraw(tentPrim);
         }
         

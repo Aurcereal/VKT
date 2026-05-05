@@ -10,7 +10,7 @@ public struct URaytracedScene {
 }
 
 public float3 SampleSkybox(float3 rd, SamplerCube skybox) {
-    return 25. * float3(0.4, 0.5, 1.0) * pow(max(0., dot(rd, float3(1., 1., 0.)/sqrt(2.))), 64.);//10. * skybox.Sample(rd).rgb;//10. * skybox.Sample(rd).rgb; // pow(skybox.Sample(rd).rgb,float3(2.2));  ;/
+    return float3(0.4, 0.5, 1.) * 4.;//25. * float3(0.4, 0.5, 1.0) * pow(max(0., dot(rd, float3(1., 1., 0.)/sqrt(2.))), 64.);//10. * skybox.Sample(rd).rgb;//10. * skybox.Sample(rd).rgb; // pow(skybox.Sample(rd).rgb,float3(2.2));  ;/
 }
 
 public float4 SampleEnvironment(float3 ro, float3 rd,
@@ -72,9 +72,14 @@ public float4 SampleEnvironmentBVH(float3 ro, float3 rd,
                                    float4x4 invModel,
                                    float3x3 invTransposeModel,
                                    BVHMesh bvhMesh,
-                                   Sampler2D worldTex,
-                                   Sampler2D worldMetalRoughness,
-                                   Sampler2D worldAO,
+
+                                   // Could package below into struct
+                                   Sampler2D albedoTexs[],
+                                   Sampler2D metalRoughnessTexs[],
+                                   Sampler2D aoTexs[],
+                                   StructuredBuffer<uint32_t> primToMaterialIndex,
+                                   ConstantBuffer<UPBRInfo> pbrInfo,
+
                                    StructuredBuffer<float> skyboxSh,
                                    SamplerCube skybox
     ) {
@@ -104,7 +109,8 @@ public float4 SampleEnvironmentBVH(float3 ro, float3 rd,
         float3 hitNorm = normalize(mul(invTransposeModel, lHitNorm));
         float3 hitPos = ro + rd * inter.t;
 
-        float3 albedo = textureGammaCorrect(worldTex.Sample(hitUv).rgb);
+        uint32_t matIndex = primToMaterialIndex[inter.triangleIndex];
+        float3 albedo = pbrInfo.albedoMult.rgb * textureGammaCorrect(albedoTexs[NonUniformResourceIndex(matIndex)].Sample(hitUv).rgb);
         float metallic = 0.;   // worldMetal.Sample(hitUv).r;
         float roughness = 0.2; // worldRoughness.Sample(hitUv).r;
         float ao = 0.;         // worldAO.Sample(hitUv).r;

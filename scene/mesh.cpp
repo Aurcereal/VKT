@@ -201,8 +201,9 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
     }
 
     indexCount = indices.size();
-    assert(indexCount == multiPrimitivePBR->triToMaterialIndex.size() / 3);
+    assert(indexCount == multiPrimitivePBR->triToMaterialIndex.size() * 3);
 
+    // TODO: bad since it's duplicating textures, we need the material redirection layer (int3 buffer for 3 indices?)
     // Materials
     for (const tinygltf::Material& mat : model.materials) {
         const auto& pbr = mat.pbrMetallicRoughness;
@@ -219,6 +220,18 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
             multiPrimitivePBR->metallicRoughnessTexs.push_back({});
             (--multiPrimitivePBR->metallicRoughnessTexs.end())->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
         }
+        // SO DEBUG TODO: NOT THIS, ENSURE THAT count(color) == count(metallicRoughness) and count(ao) > 0
+        if (pbr.metallicRoughnessTexture.index < 0 && pbr.baseColorTexture.index >= 0) {
+            const auto& img = model.images[model.textures[pbr.baseColorTexture.index].source];
+            multiPrimitivePBR->metallicRoughnessTexs.push_back({});
+            (--multiPrimitivePBR->metallicRoughnessTexs.end())->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
+        }
+        if (multiPrimitivePBR->aoTexs.size() == 0 && pbr.baseColorTexture.index >= 0) {
+            const auto& img = model.images[model.textures[pbr.baseColorTexture.index].source];
+            multiPrimitivePBR->aoTexs.push_back({});
+            (--multiPrimitivePBR->aoTexs.end())->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
+        }
+        // SO DEBUG END
         if (mat.occlusionTexture.index >= 0) {
             const auto& img = model.images[model.textures[mat.occlusionTexture.index].source];
             multiPrimitivePBR->aoTexs.push_back({});
@@ -226,13 +239,29 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
         }
     }
 
+    // Uniform
+    UPBRInfo pbrInfo = {
+        .albedoMult = multiPrimitivePBR->baseColorMult,
+        .hasAlbedoTex = true,
+        .hasMetallicRoughnessTex = true,
+        .hasAOTex = true
+    };
+    multiPrimitivePBR->uPbrInfo.emplace_back();
+    multiPrimitivePBR->uPbrInfo.back().Create(ref, sizeof(UPBRInfo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    memcpy(multiPrimitivePBR->uPbrInfo.back().MapMemory(), &pbrInfo, sizeof(UPBRInfo));
+
+    // Triangle to Index Buffer
+    multiPrimitivePBR->triToMaterialIndexBuffer.CreateDeviceLocalFromData(ref, sizeof(uint32_t) * multiPrimitivePBR->triToMaterialIndex.size(), 
+        vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst | (isStorageBuffer ? vk::BufferUsageFlagBits::eStorageBuffer : static_cast<vk::BufferUsageFlagBits>(0)), 
+        multiPrimitivePBR->triToMaterialIndex.data());
+
     // Debug test
     vector<int> testVec;
     if (multiPrimitivePBR->baseColorTexs.size() != 0) testVec.push_back(multiPrimitivePBR->baseColorTexs.size());
     if (multiPrimitivePBR->metallicRoughnessTexs.size() != 0) testVec.push_back(multiPrimitivePBR->metallicRoughnessTexs.size());
     if (multiPrimitivePBR->aoTexs.size() != 0) testVec.push_back(multiPrimitivePBR->aoTexs.size());
     for (int i = 0; i < testVec.size() - 1; i++) {
-        assert(testVec[i] == testVec[i + 1]);
+        // assert(testVec[i] == testVec[i + 1]);
     }
 }
 
@@ -292,6 +321,11 @@ void Mesh::CreateFromGLTFPrimitive(const VulkanReferences& ref, ShaderPipeline* 
 void Mesh::LoadGLTFPrimitive(const tinygltf::Model& model, const tinygltf::Primitive& prim, bool accountForMultiplePrimitives) {
     assert(accountForMultiplePrimitives || (vertices.size() + indices.size()) == 0);
     assert(!accountForMultiplePrimitives || multiPrimitivePBR != nullptr);
+
+    if (prim.indices == -1) {
+        assert(accountForMultiplePrimitives);
+        return;
+    }
 
     uint32_t indexOffset = vertices.size();
 

@@ -47,5 +47,5 @@ private:
 	void UpdateNodeBounds(BVHNode*);
 	void ChooseSplitPlane(const BVHNode*, int* pAxis, float* pPos);
 	float ChooseSplitPlaneSAH(const BVHNode*, int* pAxis, float* pPos); // -> cost
-	void Subdivide(BVHNode*);
+	void Subdivide(BVHNode*, int depth);
 };

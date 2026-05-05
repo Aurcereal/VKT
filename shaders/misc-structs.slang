@@ -11,3 +11,10 @@ public struct Vertex {
     public float2 uv;
     public float3 norm;
 };
+
+public struct UPBRInfo {
+    public float4 albedoMult;
+    public bool hasAlbedoTexture; // these unused for multi
+    public bool hasMetallicRoughnessTexture;
+    public bool hasAOTexture;
+};

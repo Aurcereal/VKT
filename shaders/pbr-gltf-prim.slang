@@ -48,12 +48,6 @@ VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
     return vOut;
 }
 
-struct UPBRInfo {
-    float4 albedoMult;
-    bool hasAlbedoTexture;
-    bool hasMetallicRoughnessTexture;
-    bool hasAOTexture;
-};
 Sampler2D albedoSampler; // TODO: these are combined image samplers w/ image, but they all use same sampler so i can just separate explicitly Texture2D and SamplerState have 1 sampler and lots of textures (need to change descriptor pool oc)
 Sampler2D metallicRoughnessSampler;
 Sampler2D aoSampler;

@@ -70,8 +70,8 @@ float4 fragMain(VSOutput o) : SV_Target
     bvh.vertices = worldVertices;
     bvh.triangleRedirection = triangleRedirection;
     bvh.nodes = bvhNodes;
-    
-    float3 Lo = SampleEnvironmentBVH(sta, reflRay, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, worldTex, worldMetal, worldAO, skyboxSh, skybox).xyz;
+
+    float3 Lo = float3(1., 0., 0.);//SampleEnvironmentBVH(sta, reflRay, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, worldTex, worldMetal, worldAO, skyboxSh, skybox).xyz;
     float3 col = gammaCorrect(reinhardOp(Lo));
 
     return float4(col, 1.0);//float4(SampleSh(norm, skyboxSh, 0), 1.);//float4(col, 1.);

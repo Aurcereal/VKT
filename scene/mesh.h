@@ -55,6 +55,7 @@ struct MultiPrimitivePBRInfo {
     vector<WTexture> aoTexs;
     vector<uint32_t> triToMaterialIndex;
     WBuffer triToMaterialIndexBuffer;
+    vector<WBuffer> uPbrInfo;
 };
 
 struct SinglePrimitivePBRInfo {

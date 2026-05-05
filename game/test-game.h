@@ -9,7 +9,7 @@ class TestGame {
 public:
 	void DrawUI();
 	void Update(float time, float dt);
-	mat4 roomTransform, ballTransform;
+	mat4 raytraceSceneTransform, ballTransform;
 	vec3 ballOffset;
 private:
 	
