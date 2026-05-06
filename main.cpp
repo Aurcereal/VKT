@@ -809,7 +809,7 @@ private:
         auto beforeProbeCreateTime = std::chrono::high_resolution_clock::now();
         pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &sponzaRaytraceMesh, bvh.get(),
             // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(10, 5, 10), vec3(0,0.3f,0), vec3(16.5*1.5f, 10*1.5f, 16.5*1.5f));
+            uvec3(20, 15, 20), vec3(0,9.5f,0), vec3(16.5*1.5f, 10*2.0f, 16.5*1.5f));
         auto afterProbeCreateTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(afterProbeCreateTime - beforeProbeCreateTime);
 

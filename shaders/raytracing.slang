@@ -111,11 +111,11 @@ public float4 SampleEnvironmentBVH(float3 ro, float3 rd,
         float3 hitPos = ro + rd * inter.t;
 
         uint32_t matIndex = primToMaterialIndex[inter.triangleIndex];
-        float3 albedo = pbrInfo.albedoMult.rgb * textureGammaCorrect(albedoTexs[NonUniformResourceIndex(matIndex)].Sample(hitUv).rgb);
+        float3 albedo = /*pbrInfo.albedoMult.rgb * */textureGammaCorrect(albedoTexs[NonUniformResourceIndex(matIndex)].Sample(hitUv).rgb);
         float metallic = 0.;   // worldMetal.Sample(hitUv).r;
         float roughness = 0.2; // worldRoughness.Sample(hitUv).r;
         float ao = 0.;         // worldAO.Sample(hitUv).r;
-        return float4(0.1*SamplePBRSky(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, skyboxSh).rgb, inter.t);
+        return float4(0.*SamplePBRSky(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, skyboxSh).rgb, inter.t);
     } else {
         return float4(SampleSkybox(rd, skybox), 1e4);
     }
@@ -167,7 +167,7 @@ public float4 SampleEnvironmentBVHEnvSH(float3 ro, float3 rd,
         float3 hitPos = ro + rd * inter.t;
 
         uint32_t matIndex = primToMaterialIndex[inter.triangleIndex];
-        float3 albedo = pbrInfo.albedoMult.rgb * textureGammaCorrect(albedoTexs[NonUniformResourceIndex(matIndex)].Sample(hitUv).rgb);
+        float3 albedo = /*pbrInfo.albedoMult.rgb * */textureGammaCorrect(albedoTexs[NonUniformResourceIndex(matIndex)].Sample(hitUv).rgb);
         float metallic = 0.;   // worldMetal.Sample(hitUv).r;
         float roughness = 0.2; // worldRoughness.Sample(hitUv).r;
         float ao = 0.;         // worldAO.Sample(hitUv).r;

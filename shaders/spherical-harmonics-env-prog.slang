@@ -115,9 +115,9 @@ void main(uint3 id: SV_DispatchThreadID,
     sharedDepthSamples[threadIDWithinGroup] = float4(rd, depth);
 
     // Updated shared sh
-    const float cosCo1 = PI;
-    const float cosCo2 = (2. / 3.) * PI;
-    const float cosCo3 = PI * .25;
+    const float cosCo1 = 1.;//PI;
+    const float cosCo2 = 1.;//(2. / 3.) * PI;
+    const float cosCo3 = 1.;//PI * .25;
 
     // There's also context dependent one in https://ppsloan.org/publications/StupidSH36.pdf that takes direction dominance into account
     float windowMults[3];

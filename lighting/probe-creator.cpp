@@ -281,7 +281,7 @@ void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform)
 
 	// Bake all probes
 	uint32_t probeCount = probeCounts.x * probeCounts.y * probeCounts.z;
-	uint32_t bakeCount = 1000; // TODO: need even more maybe or sh improvement
+	uint32_t bakeCount = 50; // TODO: need even more maybe or sh improvement
 	uint32_t groupCount = ceilDiv(probeCount, GROUP_SIZE);
 	std::cout << "Probe Count: " << probeCount << " Group Count: " << groupCount << std::endl;
 
@@ -299,7 +299,7 @@ void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform)
 			vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead, 
 			vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead);
 
-		if (i % 5 == 0 || i == bakeCount - 1) {
+		if (i % 1 == 0 || i == bakeCount - 1) {
 			computeDispatcher.FinishRecordSubmit(*ref, true);
 			std::cout << "Baked " << i + 1 << "/" << bakeCount << std::endl;
 			computeDispatcher.StartRecord(*ref); // TODO: del
@@ -327,8 +327,7 @@ uint32_t currGroup = 0;
 
 void ProbeCreator::ContinueFeedbackBake() {
 	if (!feedbackComputeDispatcher.IsRunning()) {
-		// Swap
-		pingPongSelect = !pingPongSelect;
+		
 
 		
 		ref->graphicsQueue.waitIdle();
@@ -362,6 +361,9 @@ void ProbeCreator::ContinueFeedbackBake() {
 		while (currGroup >= groupCount) {
 			feedbackBakeCount++;
 			currGroup -= groupCount;
+
+			// Finished the bake, swap buffer and go again
+			pingPongSelect = !pingPongSelect;
 		}
 		struct PBakePassInfo bakePassInfo = {
 			.currGroup = currGroup,

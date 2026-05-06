@@ -116,15 +116,15 @@ void main(uint3 id: SV_DispatchThreadID,
     sharedDepthSamples[threadIDWithinGroup] = float4(rd, depth);
 
     // Updated shared sh
-    const float cosCo1 = PI;
-    const float cosCo2 = (2. / 3.) * PI;
-    const float cosCo3 = PI * .25;
+    const float cosCo1 = 1.;//PI;
+    const float cosCo2 = 1.;//(2. / 3.) * PI;
+    const float cosCo3 = 1.;//PI * .25;
 
     // There's also context dependent one in https://ppsloan.org/publications/StupidSH36.pdf that takes direction dominance into account
     float windowMults[3];
     const float windowSize = 10.;
     for (int i = 0; i < 3; i++) {
-        windowMults[i] = 0.5 * (1 + cos(PI * float(i)) / windowSize);
+        windowMults[i] = 1.;//0.5 * (1 + cos(PI * float(i)) / windowSize);
     }
 
     sharedCoefficients[threadIDWithinGroup][0] = 0.28209479 * 0.28209479 * li * cosCo1 * windowMults[0];
@@ -149,7 +149,7 @@ void main(uint3 id: SV_DispatchThreadID,
         float srcWeight = shCoefficients[probeToBake * 28 + 27];
         float dstWeight = 1.0; // todo: slow history changing and temporal stuff for realtime updating?
         float totalWeight = srcWeight + dstWeight;
-        float srcBlend = .98; //srcWeight / totalWeight; float dstBlend = dstWeight / totalWeight;
+        float srcBlend = .95; //srcWeight / totalWeight; float dstBlend = dstWeight / totalWeight;
         shCoefficients[probeToBake * 28 + 27] = totalWeight;
         
         //
