@@ -2,6 +2,7 @@ module Raytracing;
 import PBR;
 import bvh_traversal;
 import misc_structs;
+import probe_helper;
 
 public struct URaytracedScene {
     public float4x4 model;
@@ -114,7 +115,63 @@ public float4 SampleEnvironmentBVH(float3 ro, float3 rd,
         float metallic = 0.;   // worldMetal.Sample(hitUv).r;
         float roughness = 0.2; // worldRoughness.Sample(hitUv).r;
         float ao = 0.;         // worldAO.Sample(hitUv).r;
-        return float4(SamplePBRSky(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, skyboxSh).rgb, inter.t);
+        return float4(0.1*SamplePBRSky(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, skyboxSh).rgb, inter.t);
+    } else {
+        return float4(SampleSkybox(rd, skybox), 1e4);
+    }
+}
+
+public float4 SampleEnvironmentBVHEnvSH(float3 ro, float3 rd,
+                                    float4x4 invModel,
+                                    float3x3 invTransposeModel,
+                                    BVHMesh bvhMesh,
+
+                                    // Could package below into struct
+                                    Sampler2D albedoTexs[],
+                                    Sampler2D metalRoughnessTexs[],
+                                    Sampler2D aoTexs[],
+                                    StructuredBuffer<uint32_t> primToMaterialIndex,
+                                    ConstantBuffer<UPBRInfo> pbrInfo,
+
+                                    StructuredBuffer<float> envSH,
+                                    Sampler2D<float> depthTexture, 
+                                    ConstantBuffer<UProbeVolumeLayout> probeLayout,
+                                    SamplerCube skybox,
+
+                                    int ignoredProbe
+    ) {
+    float3 lro = mul(invModel, float4(ro, 1.)).xyz;
+    float3 lrd = mul(invModel, float4(rd, 0.)).xyz;
+    Intersection inter = RayIntersectBVH(lro, lrd, bvhMesh);
+    if (inter.t < 1e4) {
+        float3 lHitPnt = lro + lrd * inter.t;
+
+        Vertex vs[3] = Vertex[3](
+            bvhMesh.vertices[bvhMesh.indices[inter.triangleIndex * 3 + 0]],
+            bvhMesh.vertices[bvhMesh.indices[inter.triangleIndex * 3 + 1]],
+            bvhMesh.vertices[bvhMesh.indices[inter.triangleIndex * 3 + 2]]
+        );
+
+        float3 cl = cross(vs[2].pos - vs[0].pos, vs[1].pos - vs[0].pos);
+        // if (length(cl) < 0.001) continue;
+        float area = 0.5 * length(cl);
+
+        float b2 = 0.5 * length(cross(lHitPnt - vs[0].pos, lHitPnt - vs[1].pos));
+        float b0 = 0.5 * length(cross(lHitPnt - vs[1].pos, lHitPnt - vs[2].pos));
+        float b1 = 0.5 * length(cross(lHitPnt - vs[2].pos, lHitPnt - vs[0].pos));
+        float2 hitUv = (b0 * vs[0].uv + b1 * vs[1].uv + b2 * vs[2].uv) / area;
+        // float3 lHitPos = (b0 * vs[0].pos + b1 * vs[1].pos + b2 * vs[2].pos) / area;
+        float3 lHitNorm = b0 * vs[0].norm + b1 * vs[1].norm + b2 * vs[2].norm;
+
+        float3 hitNorm = normalize(mul(invTransposeModel, lHitNorm));
+        float3 hitPos = ro + rd * inter.t;
+
+        uint32_t matIndex = primToMaterialIndex[inter.triangleIndex];
+        float3 albedo = pbrInfo.albedoMult.rgb * textureGammaCorrect(albedoTexs[NonUniformResourceIndex(matIndex)].Sample(hitUv).rgb);
+        float metallic = 0.;   // worldMetal.Sample(hitUv).r;
+        float roughness = 0.2; // worldRoughness.Sample(hitUv).r;
+        float ao = 0.;         // worldAO.Sample(hitUv).r;
+        return float4(SamplePBREnv(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, envSH, depthTexture, probeLayout, ignoredProbe).rgb, inter.t);
     } else {
         return float4(SampleSkybox(rd, skybox), 1e4);
     }

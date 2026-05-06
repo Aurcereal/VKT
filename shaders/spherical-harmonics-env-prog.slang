@@ -7,24 +7,23 @@ import bvh_traversal;
 groupshared float3[64][9] sharedCoefficients;
 groupshared float4[64] sharedDepthSamples;
 
-[[vk::binding(0,0)]] ConstantBuffer<UCamera> ubo;
-[[vk::binding(1,0)]]ConstantBuffer<URaytracedScene> uRaytracedScene;
-[[vk::binding(2,0)]]SamplerCube skybox;
-[[vk::binding(3,0)]]StructuredBuffer<Vertex> worldVertices;
-[[vk::binding(4,0)]]StructuredBuffer<uint32_t> worldIndices;
-[[vk::binding(5,0)]]StructuredBuffer<uint32_t> triangleRedirection;
-[[vk::binding(6,0)]]StructuredBuffer<BVHNode> bvhNodes;
-[[vk::binding(7,0)]]StructuredBuffer<uint32_t> primToMaterialIndex;
+[[vk::binding(0,0)]]ConstantBuffer<URaytracedScene> uRaytracedScene;
+[[vk::binding(1,0)]]SamplerCube skybox;
+[[vk::binding(2,0)]]StructuredBuffer<Vertex> worldVertices;
+[[vk::binding(3,0)]]StructuredBuffer<uint32_t> worldIndices;
+[[vk::binding(4,0)]]StructuredBuffer<uint32_t> triangleRedirection;
+[[vk::binding(5,0)]]StructuredBuffer<BVHNode> bvhNodes;
+[[vk::binding(6,0)]]StructuredBuffer<uint32_t> primToMaterialIndex;
 
-[[vk::binding(8, 0)]]Sampler2D albedoTexs[];
-[[vk::binding(9, 0)]]Sampler2D metalRoughnessTexs[];
-[[vk::binding(10, 0)]]Sampler2D AOTexs[];
-[[vk::binding(11, 0)]]ConstantBuffer<UPBRInfo> pbrInfo;
+[[vk::binding(7, 0)]]Sampler2D albedoTexs[];
+[[vk::binding(8, 0)]]Sampler2D metalRoughnessTexs[];
+[[vk::binding(9, 0)]]Sampler2D AOTexs[];
+[[vk::binding(10, 0)]]ConstantBuffer<UPBRInfo> pbrInfo;
 
-[[vk::binding(12,0)]]StructuredBuffer<float> skySh;
-[[vk::binding(13,0)]]RWStructuredBuffer<float> shCoefficients;
-[[vk::binding(14,0)]]RWStructuredBuffer<float> depthBuffer;
-[[vk::binding(15,0)]]ConstantBuffer<UProbeVolumeLayout> probeLayout;
+[[vk::binding(11,0)]]StructuredBuffer<float> skySh;
+[[vk::binding(12,0)]]RWStructuredBuffer<float> shCoefficients;
+[[vk::binding(13,0)]]RWStructuredBuffer<float> depthBuffer;
+[[vk::binding(14,0)]]ConstantBuffer<UProbeVolumeLayout> probeLayout;
 
 struct PushConstants {
     uint32_t currGroup;

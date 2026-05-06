@@ -39,18 +39,27 @@ namespace ShaderParameter {
 		const WBuffer* buffer;
 	};
 
+	// Pretty jank, but, material sees this struct in its params and it's like 'ok I have to create a 2nd array of descriptor sets' and then the 2nd array is the same
+	// Except it uses bufferB.  Material can have ping pong flag and then when we do enqueue draw call we can have optional ping pong boolean.  It's jank but not the worst..
+	struct UPingPongBuffer {
+		const WBuffer* bufferA;
+		const WBuffer* bufferB;
+	};
+
 	struct UStorageTexture {
 		WTexture* texture;
 	};
 
 	struct MParameter {
 		Type type;
+		bool pingPongEnabled = false;
 		union {
 			UUniform uniform;
 			UDynamicUniform dynamicUniform;
 			UCombinedSampler sampler;
 			UCombinedSamplerArray samplers;
 			UBuffer buffer;
+			UPingPongBuffer pingPongBuffer;
 			UStorageTexture storageTexture;
 		};
 
@@ -59,6 +68,7 @@ namespace ShaderParameter {
 		inline MParameter(UCombinedSampler s) : type(Type::COMBINED_SAMPLER), sampler(s) {}
 		inline MParameter(UCombinedSamplerArray s) : type(Type::COMBINED_SAMPLER_ARRAY), samplers(s) {}
 		inline MParameter(UBuffer b) : type(Type::BUFFER), buffer(b) {}
+		inline MParameter(UPingPongBuffer b) : type(Type::BUFFER), pingPongEnabled(true), pingPongBuffer(b) {}
 		inline MParameter(UStorageTexture s) : type(Type::STORAGE_TEXTURE), storageTexture(s) {}
 
 		// inline ~MParameter() {}

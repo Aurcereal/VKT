@@ -31,19 +31,25 @@ void ComputeDispatcher::StartRecord(const VulkanReferences& ref) {
 /// </summary>
 /// <param name="ref"></param>
 /// <param name="waitForFinish"></param>
-void ComputeDispatcher::FinishRecordSubmit(const VulkanReferences& ref, bool waitForFinish) {
+void ComputeDispatcher::FinishRecordSubmit(const VulkanReferences& ref, bool waitForFinish, bool signalSemaphore) {
 	cmd.end();
 
 	const vk::SubmitInfo submitInfo = {
 			.commandBufferCount = 1,
 			.pCommandBuffers = &*cmd, // Submit this cmd buffer
 
-			.signalSemaphoreCount = (waitForFinish ? 0u : 1),
-			.pSignalSemaphores = waitForFinish ? nullptr : &*computeFinishedSemaphore
+			.signalSemaphoreCount = (signalSemaphore ? 1 : 0u),
+			.pSignalSemaphores = signalSemaphore ? &*computeFinishedSemaphore : nullptr
 	};
 	ref.computeQueue.submit(submitInfo, *fence);
 	
 	if (waitForFinish) {
 		WaitForFinish(ref);
 	}
+}
+
+bool ComputeDispatcher::IsRunning() {
+	auto status = fence.getStatus();
+	assert(status == vk::Result::eNotReady || status == vk::Result::eSuccess);
+	return status == vk::Result::eNotReady;
 }

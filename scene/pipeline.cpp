@@ -243,7 +243,7 @@ void ShaderPipeline::BindDescriptorSets(const vk::raii::CommandBuffer& cmd, cons
     assert(false); // dont use this method anymore
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSet, nullptr); // change nullptr to offsets
 }
-void ShaderPipeline::BindMaterialDescriptorSets(const VulkanReferences& ref, const vk::raii::CommandBuffer& cmd, const Material& mat, uint32_t setIndex, vector<uint32_t> dynamicIndices) const {
+void ShaderPipeline::BindMaterialDescriptorSets(const VulkanReferences& ref, const vk::raii::CommandBuffer& cmd, const Material& mat, uint32_t descIndex, vector<uint32_t> dynamicIndices, bool pingPongSelection) const {
     vector<uint32_t> dynamicOffsets;
     int i = 0;
     for (const auto& param : mat.params) {
@@ -252,7 +252,10 @@ void ShaderPipeline::BindMaterialDescriptorSets(const VulkanReferences& ref, con
             ++i;
         }
     }
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *mat.descriptorSets[setIndex], dynamicOffsets);
+    assert(!pingPongSelection || mat.usePingPong);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, 
+        *((pingPongSelection ? mat.alternateDescriptorSets : mat.descriptorSets)[descIndex]), 
+        dynamicOffsets);
 }
 
 void ComputePipeline::Create(const VulkanReferences& ref, const string& path, const vector<ShaderParameter::SParameter>& parameters, const vector<ShaderParameter::MParameter>& parameterData, uvec3 workGroupSize, bool usePushConstants, vk::DeviceSize pushConstantSize) {
@@ -307,11 +310,13 @@ void ComputePipeline::Create(const VulkanReferences& ref, const string& path, co
     this->isCreated = true;
 }
 
-void ComputePipeline::EnqueueDispatch(ComputeDispatcher* dispatcher, uvec3 totalThreadCount) {
+void ComputePipeline::EnqueueDispatch(ComputeDispatcher* dispatcher, uvec3 totalThreadCount, bool pingPongSelect) {
     assert(isCreated);
+    assert(!pingPongSelect || computeMaterial->usePingPong);
 
     dispatcher->cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *pipeline);
-    dispatcher->cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *pipelineLayout, 0, *(computeMaterial->descriptorSets[0]), nullptr);
+    assert(computeMaterial->descriptorSets.size() == 1);
+    dispatcher->cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *pipelineLayout, 0, *((pingPongSelect ? computeMaterial->alternateDescriptorSets : computeMaterial->descriptorSets)[0]), nullptr);
 
     uvec3 workGroupCount = ceil(vec3(totalThreadCount) / vec3(workGroupSize));
     // std::cout << "wx: " << workGroupCount.x << " wy: " << workGroupCount.y << " wz: " << workGroupCount.z << std::endl;

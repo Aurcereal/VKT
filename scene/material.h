@@ -14,12 +14,18 @@ using namespace glm;
 class Material {
 public:
 	void Create(WPipeline*, const VulkanReferences&, const vector<ShaderParameter::MParameter>& parameters, int duplicationCount = MAX_FRAMES_IN_FLIGHT);// WTexture&, WTexture&, WTexture&, WTexture&, array<WBuffer*, 2>& meshBuffers);
-	vector<vk::raii::DescriptorSet> descriptorSets;
 	WPipeline* pipeline = nullptr;
 private:
 	friend class ShaderPipeline;
+	friend class ComputePipeline;
+
 	vector<ShaderParameter::MParameter> params;
-	void CreateDescriptorSets(const VulkanReferences&, const vector<ShaderParameter::MParameter>& parameters);// WTexture&, WTexture&, WTexture&, WTexture&, array<WBuffer*, 2>& meshBuffers);
+	void CreateDescriptorSet(const VulkanReferences&, const vector<ShaderParameter::MParameter>& parameters, bool pingPongSelection = false);// WTexture&, WTexture&, WTexture&, WTexture&, array<WBuffer*, 2>& meshBuffers);
+
+	vector<vk::raii::DescriptorSet> descriptorSets;
+
+	bool usePingPong;
+	vector<vk::raii::DescriptorSet> alternateDescriptorSets;
 
 	int duplicationCount = -1;
 };

@@ -8,8 +8,9 @@ class ComputeDispatcher {
 public:
 	void Create(const VulkanReferences&);
 	void StartRecord(const VulkanReferences&);
-	void FinishRecordSubmit(const VulkanReferences&, bool waitForFinished = true);
-	
+	void FinishRecordSubmit(const VulkanReferences&, bool waitForFinished = true, bool signalSemaphore = false);
+	bool IsRunning();
+
 	vk::raii::CommandBuffer cmd = nullptr;
 	vk::raii::Semaphore computeFinishedSemaphore = nullptr; // TODO: FOR NOW UNUSED, timeline semaphores better
 private:

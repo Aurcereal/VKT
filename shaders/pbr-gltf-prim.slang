@@ -80,6 +80,6 @@ float4 fragMain(FSInput o) : SV_Target
 
     float3 col = gammaCorrect(reinhardOp(SamplePBREnv(wo, o.worldPos+norm*0.01, norm, albedo, metallic, roughness, ambientOcclusion, shCoefficients, depthTexture, probeLayout)));
 
-    return float4(albedo, 1.);
+    return float4(col, 1.);
 
 }

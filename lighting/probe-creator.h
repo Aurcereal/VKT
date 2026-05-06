@@ -13,12 +13,16 @@
 using namespace glm;
 
 struct ProbeVolume {
-	WBuffer shCoefficients;
+	WBuffer shCoefficientsA;
+	WBuffer shCoefficientsB; 
+	// copy from A to B at the end of initial bake (rn only 1 depth texture it's easier but later would wanna hystersis both)
+	// rendering material will create ping pong A and B
+	// have a SetupFeedbackBake function and a ContinueFeedbackBake function (no hang) to be called every frame
+
 	glm::uvec3 probeCounts;
 	glm::mat4 transform;
 	glm::mat4 invTransform; // to (0, 1)
 	vector<WBuffer> probeLayoutUBO;
-	// TODO: octahedral depth map atlas here with gutter which will be filled in post process step
 	WTexture octahedralDepthMap;
 	WBuffer depthBuffer;
 
@@ -30,13 +34,18 @@ struct ProbeVolume {
 
 class ProbeCreator {
 public:
-	void Create(const VulkanReferences*, WTexture* skybox, vector<WBuffer>* uniformBuffers, vector<WBuffer>* uRaytracedSceneBuffer, Mesh* raytraceMesh, const BVHGPU*,
+	void Create(const VulkanReferences*, WTexture* skybox, vector<WBuffer>* uRaytracedSceneBuffer, Mesh* raytraceMesh, const BVHGPU*,
 		uvec3 probeCounts, vec3 boundingBoxOrigin, vec3 boundingBoxSize);
 	uPtr<ProbeVolume> probeVolume;
 	
 	WBuffer* GetSkyboxSH();
+
+	inline bool GetPingPongSelect() { return pingPongSelect; }
+	void ContinueFeedbackBake();
 private:
 	void BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform);
+	
+	void SetupFeedbackBake();
 
 	WBuffer* BakeAndSetSkyboxProbe();
 	void AccumulateScratchIntoBuffer(WBuffer* buf, vk::DeviceSize offset);
@@ -51,11 +60,15 @@ private:
 	bool isSkyboxBaked = false;
 
 	ComputePipeline bakeEnvironmentProbe;
+	ComputePipeline feedbackBakeEnvironmentProbe;
 	ComputePipeline bakeSkyboxProbe;
 
 	ComputePipeline convertDepthBufferToTexture;
 
 	ComputeDispatcher computeDispatcher;
+	ComputeDispatcher feedbackComputeDispatcher;
+
+	bool pingPongSelect = false;
 
 	vector<WBuffer> probePositionUBO; // shouldn't have to do vector..
 };

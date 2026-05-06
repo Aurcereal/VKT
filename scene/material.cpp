@@ -12,12 +12,18 @@ void Material::Create(WPipeline* pipeline, const VulkanReferences& ref, const ve
     this->pipeline = pipeline;
     this->duplicationCount = duplicationCount;
     this->params = parameters;
+    this->usePingPong = std::ranges::find_if(parameters, [&](const ShaderParameter::MParameter& param) { return param.pingPongEnabled; }) != parameters.end();
 
-    // Will probably need to do other stuff later too
-    CreateDescriptorSets(ref, parameters);
+    CreateDescriptorSet(ref, parameters);
+    if (this->usePingPong) {
+        CreateDescriptorSet(ref, parameters, true);
+    }
 }
 
-void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<ShaderParameter::MParameter>& parameters) {
+void Material::CreateDescriptorSet(const VulkanReferences& ref, const vector<ShaderParameter::MParameter>& parameters, bool pingPongSelection) {
+    //
+    vector<vk::raii::DescriptorSet>& targetDescriptorSet = pingPongSelection ? alternateDescriptorSets : descriptorSets;
+    
     // Need to copy the layouts to make the descriptors
     vector<vk::DescriptorSetLayout> layouts(duplicationCount, *pipeline->descriptorSetLayout);
     vk::DescriptorSetAllocateInfo allocateInfo = {
@@ -27,9 +33,9 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
     };
 
     // Allocate
-    descriptorSets.clear();
-    descriptorSets = ref.device.allocateDescriptorSets(allocateInfo);
-    assert(descriptorSets.size() == duplicationCount);
+    targetDescriptorSet.clear();
+    targetDescriptorSet = ref.device.allocateDescriptorSets(allocateInfo);
+    assert(targetDescriptorSet.size() == duplicationCount);
 
     vector<void*> mallocData;
     vk::DescriptorImageInfo* aPtr;
@@ -37,7 +43,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
     // Configure descriptor sets
     for (size_t i = 0; i < layouts.size(); i++) {
         vector<WDescriptorSet> ss;
-        ss.reserve(parameters.size()*40); // IMPORTANT since we have pointers to vectors, 12 since texture array gives multiple descriptors
+        ss.reserve(parameters.size()*40); // IMPORTANT since we have pointers to vectors, 12 since texture array gives multiple descriptors.. just use malloc like u did for one of them omg
         vector<vk::WriteDescriptorSet> ssWriters;
         for (uint j = 0; j < parameters.size(); j++) {
             auto& param = parameters[j];
@@ -49,11 +55,11 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
             case ShaderParameter::Type::UNIFORM:
                 bufIndex = i;
                 if (param.uniform.uniformBuffers->size() < duplicationCount) {
-                    std::cerr << "Uniform Buffer Duplication Count is SMALLER than material's duplication count, re-using final UBO for all remaining duplications!!" << std::endl;
+                    // std::cerr << "Uniform Buffer Duplication Count is SMALLER than material's duplication count, re-using final UBO for all remaining duplications!!" << std::endl;
                     bufIndex = std::min(i, param.uniform.uniformBuffers->size() - 1);
                 }
                 if (param.uniform.uniformBuffers->size() > duplicationCount) {
-                    std::cerr << "Uniform Buffer Duplication Count is greater than material's duplication count, this is weird but COULD BE valid." << std::endl;
+                    // std::cerr << "Uniform Buffer Duplication Count is greater than material's duplication count, this is weird but COULD BE valid." << std::endl;
                 }
                 ss.push_back(
                     vk::DescriptorBufferInfo{
@@ -63,7 +69,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     }
                 );
                 ssWriters.push_back({
-                    .dstSet = descriptorSets[i],
+                    .dstSet = targetDescriptorSet[i],
                     .dstBinding = j,
                     .dstArrayElement = 0,
                     .descriptorCount = 1,
@@ -89,7 +95,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     }
                 );
                 ssWriters.push_back({
-                    .dstSet = descriptorSets[i],
+                    .dstSet = targetDescriptorSet[i],
                     .dstBinding = j,
                     .dstArrayElement = 0,
                     .descriptorCount = 1,
@@ -107,7 +113,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     }
                 });
                 ssWriters.push_back({
-                    .dstSet = descriptorSets[i],
+                    .dstSet = targetDescriptorSet[i],
                     .dstBinding = j,
                     .dstArrayElement = 0,
                     .descriptorCount = 1,
@@ -128,7 +134,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                 }
                 
                 ssWriters.push_back({
-                    .dstSet = descriptorSets[i],
+                    .dstSet = targetDescriptorSet[i],
                     .dstBinding = j,
                     .dstArrayElement = 0,
                     .descriptorCount = static_cast<uint32_t>(param.samplers.textures->size()),
@@ -139,13 +145,14 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
             case ShaderParameter::Type::BUFFER:
                 ss.push_back(
                     vk::DescriptorBufferInfo{
-                        .buffer = param.buffer.buffer->buffer,
+                        .buffer = !param.pingPongEnabled ? param.buffer.buffer->buffer :
+                            (pingPongSelection ? param.pingPongBuffer.bufferB->buffer : param.pingPongBuffer.bufferA->buffer),
                         .offset = 0,
                         .range = param.buffer.buffer->bufferSize
                     }
                 );
                 ssWriters.push_back({
-                    .dstSet = descriptorSets[i],
+                    .dstSet = targetDescriptorSet[i],
                     .dstBinding = j,
                     .dstArrayElement = 0,
                     .descriptorCount = 1,
@@ -162,7 +169,7 @@ void Material::CreateDescriptorSets(const VulkanReferences& ref, const vector<Sh
                     }
                 );
                 ssWriters.push_back({
-                    .dstSet = descriptorSets[i],
+                    .dstSet = targetDescriptorSet[i],
                     .dstBinding = j,
                     .dstArrayElement = 0,
                     .descriptorCount = 1,

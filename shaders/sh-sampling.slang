@@ -44,7 +44,7 @@ public float3 SampleSh(float3 rd, StructuredBuffer<float> shCoefficients, uint b
 
 #define DEBUG_OUT_OF_BOUNDS 0
 
-public float3 SampleInterpolatedSh(float3 norm, float3 pos, StructuredBuffer<float> shCoefficients, Sampler2D<float> depthTexture, ConstantBuffer<UProbeVolumeLayout> probeLayout) {
+public float3 SampleInterpolatedSh(float3 norm, float3 pos, StructuredBuffer<float> shCoefficients, Sampler2D<float> depthTexture, ConstantBuffer<UProbeVolumeLayout> probeLayout, int ignoredProbe) {
     pos += norm * 0.3; // bias
     
     float3 lp = mul(probeLayout.invTransform, float4(pos, 1.)).xyz; // [0, 1] unless out of bounds
@@ -91,6 +91,9 @@ public float3 SampleInterpolatedSh(float3 norm, float3 pos, StructuredBuffer<flo
         // Backface
         // Offset prevents going to 0 when small details that are close to backfaces need light
         weight *= sqr(max(1e-4, (dot(dirToProbe, norm) + 1.) * .5)) + 0.2; // From the Josa Paper TODO: proper citation
+
+        //
+        weight *= get1DProbeID(probeLayout.probeCounts, id + offset) == ignoredProbe ? 0.0 : 1.0;
 
         // Depth
         float2 depths = GetInterpolatedDepthAndSqr(probeLayout.probeCounts, id + offset, DirectionToUV(-dirToProbe), depthTexture);

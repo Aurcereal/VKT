@@ -87,10 +87,12 @@ void WRenderPass::Start(RenderTarget* target, vk::raii::CommandBuffer* cmd, bool
 }
 
 Material* currMat = nullptr;
-void WRenderPass::EnqueueSetMaterial(Material& mat, int setIndex, vector<uint32_t> dynamicIndices) {
+void WRenderPass::EnqueueSetMaterial(Material& mat, int setIndex, vector<uint32_t> dynamicIndices, bool pingPongSelection) {
     currMat = &mat;
     (static_cast<const ShaderPipeline*>(mat.pipeline))->Bind(*currCmd); // TODO: separate binding mat and shader for optimization
-    (static_cast<const ShaderPipeline*>(mat.pipeline))->BindMaterialDescriptorSets(*ref, *currCmd, mat, setIndex, dynamicIndices);
+
+
+    (static_cast<const ShaderPipeline*>(mat.pipeline))->BindMaterialDescriptorSets(*ref, *currCmd, mat, setIndex, dynamicIndices, pingPongSelection);
 }
 
 void WRenderPass::EnqueueDraw(const Mesh& mesh) {

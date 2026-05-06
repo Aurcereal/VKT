@@ -807,9 +807,9 @@ private:
         // Bake Probes
         UpdateUniformBuffer(0);
         auto beforeProbeCreateTime = std::chrono::high_resolution_clock::now();
-        pc.Create(&coreReferences, &testCubeMap, &uniformBuffers, &uRaytraceSceneBuffer, &sponzaRaytraceMesh, bvh.get(),
+        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &sponzaRaytraceMesh, bvh.get(),
             // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(10, 5, 10), vec3(0), vec3(16.5, 10, 16.5));
+            uvec3(10, 5, 10), vec3(0,0.3f,0), vec3(16.5*1.5f, 10*1.5f, 16.5*1.5f));
         auto afterProbeCreateTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(afterProbeCreateTime - beforeProbeCreateTime);
 
@@ -845,7 +845,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &metallic}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),// &writtenCubemap }),
-            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->shCoefficients}),
+            ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer {.bufferA = &pc.probeVolume->shCoefficientsA, .bufferB = &pc.probeVolume->shCoefficientsB }),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
@@ -884,7 +884,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {}), // not optional
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
-            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->shCoefficients}),
+            ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer {.bufferA = &pc.probeVolume->shCoefficientsA, .bufferB = &pc.probeVolume->shCoefficientsB }),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
@@ -950,7 +950,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &metallic}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
-            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->shCoefficients}),
+		    ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer {.bufferA = &pc.probeVolume->shCoefficientsA, .bufferB = &pc.probeVolume->shCoefficientsB }),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
@@ -1096,7 +1096,7 @@ private:
         // renderPass.EnqueueDraw(testRoom);
         //renderPass.EnqueueSetMaterial(blobMaterial, currFrameIndex, { 1 });
         for (const Mesh& tentPrim : *sponzaPrims) {
-            renderPass.EnqueueSetMaterial(tentPrim.singlePrimitivePBR->mat, currFrameIndex, { 0 });
+            renderPass.EnqueueSetMaterial(tentPrim.singlePrimitivePBR->mat, currFrameIndex, { 0 }, pc.GetPingPongSelect());
             renderPass.EnqueueDraw(tentPrim);
         }
         
@@ -1145,6 +1145,7 @@ private:
             inputManager.Update(window);
             camera.Update(inputManager, dt);
             game.Update(time, dt);
+            pc.ContinueFeedbackBake();
 
             DrawFrame();
         }
