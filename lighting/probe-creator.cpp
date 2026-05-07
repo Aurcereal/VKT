@@ -3,11 +3,11 @@
 #include "helper/math.h"
 
 // Assume no other dynamic offs in mat
-void ProbeVolume::DrawDebugProbeVolume(WRenderPass* renderPass, const Mesh& probeMesh, Material& mat, uint32_t setIndex) {
+void ProbeVolume::DrawDebugProbeVolume(WRenderPass* renderPass, const Mesh& probeMesh, Material& mat, uint32_t setIndex, bool pingPongSelection) {
 	uint32_t count = probeCounts.x * probeCounts.y * probeCounts.z;
 
 	for (uint32_t i = 0; i < count; i++) {
-		renderPass->EnqueueSetMaterial(mat, setIndex, { i });
+		renderPass->EnqueueSetMaterial(mat, setIndex, { i }, pingPongSelection);
 		renderPass->EnqueueDraw(probeMesh);
 	}
 }
