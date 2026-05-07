@@ -197,4 +197,28 @@ A very bright sun light for somewhat harder lighting.
 |:--:|
 | Diagram from [Stupid SH Tricks Paper](https://ppsloan.org/publications/StupidSH36.pdf) showing windowing's improvements for bright sunlights |
 
-Should do windowing for environment too
+---
+# 5/7/2026 Update - GLTF Loading & Progressive Feedback Baking
+- Added GLTF Loading and raytracing a GLTF with an arbitrary amount of meshes and textures.
+- Progressive Feedback Baking means that we continuously keep baking more samples for the probes, and each bake uses the probes from the previous bake.  We have a small temporal accumulation factor, so this allows for infinite bounces & reactions to scene changes (like a light).
+
+![](ShowcaseMedia/sponzaIndirectAndDynamicLightNoImportance.gif)
+
+Very large scene so probes aren't very dense.  Smaller scenes react to changes much faster (but the only good small scene I found uses stuff my GLTF Loader doesn't support now). Dark areas receive 2nd bounce light and probes react to changes from the box light (that's just part of the scene).  No importance sampling for light right now.
+
+![](ShowcaseMedia/sponzaLightWithBlob.gif)
+
+This scene bakes a bit slower since we reduce compute work so it doesn't hurt rendering performance as much.
+
+## Problems
+- Dense probes look noisy because temporal accumulation weighs recent samples much higher, would be better to do a fast/rough temportal accumulation method when lights are changing and a slow temporal one when the lights aren't changing.
+- Sometimes corners of rooms just don't get light even if their nearby probes have a bit of light?  Major problem for indirect lighting.  I thought it was that it was interpolating to a dead probe, but I don't think that's the issue anymore.. have to debug more.
+- No importance sampling
+- Need to reduce compute work being down at the same time as rendering, make the workload smaller, which would make light reactions slower.
+- Could benefit from doing lots of samples before actually switching to the next bake of probes.
+- Better material system for GLTF in raytracing.
+- Should my BVH be speeding things up more?  It's only like roughly 5-8x speedup even for a large scene.
+
+## Postmortem
+
+- I'll continue working on this project, but I feel like I learned a lot about Vulkan & Realtime Rendering.  Vulkan is hard but it's kind of fun.
