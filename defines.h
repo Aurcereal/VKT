@@ -13,6 +13,7 @@ import vulkan_hpp;
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // Force projection matrix to have (0,1) depth instead of (-1,1)
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 // We need these for our hash functinos
 #define GLM_ENABLE_EXPERIMENTAL
@@ -48,3 +49,5 @@ constexpr int MAX_FRAMES_IN_FLIGHT = 2; // Shouldn't be too many, don't want GPU
 #define dict unordered_map
 
 typedef unsigned int uint;
+
+#define SCENE 1

@@ -18,10 +18,11 @@ public:
 	void FinishExecute(bool waitForFinish = true, vk::ImageLayout targetColorLayout = vk::ImageLayout::eUndefined, vk::raii::Semaphore* waitSem = nullptr, vk::raii::Semaphore* signalSem = nullptr);
 
 	void WaitForFinish();
+
+	vk::raii::CommandBuffer* currCmd = nullptr;
 private:
 	const VulkanReferences* ref = nullptr;
 	const RenderTarget* target = nullptr;
-
-	vk::raii::CommandBuffer* currCmd = nullptr;
+	
 	vk::raii::Fence drawFence = nullptr;
 };

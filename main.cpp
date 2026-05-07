@@ -51,6 +51,13 @@ struct URaytracedScene {
     mat4 invTransposeModel;
 };
 
+struct UBoxLight {
+    mat4 model;
+    mat4 invModel;
+    vec3 emission;
+    float dummy; // might not be necessary
+};
+
 class Application {
 public:
     void Run() {
@@ -119,11 +126,13 @@ private:
     Mesh chairMesh;
     Mesh cubeMesh;
     Mesh testRoom;
-    uPtr<vector<Mesh>> sponzaPrims;
+    // uPtr<vector<Mesh>> sponzaPrims;
+    uPtr<vector<Mesh>> breakfastRoomPrims;
 
     vector<WBuffer> uniformBuffers; // Memory for each frame in flight so each frame can have diff uniform vals
     vector<WBuffer> uEntityBuffers;
     vector<WBuffer> uRaytraceSceneBuffer; // Only needs 1 copy
+    vector<WBuffer> uBoxLightBuffer; // Only needs 1 copy
 
     ShaderPipeline depthOrbShader;
 
@@ -132,6 +141,9 @@ private:
     Material blobMaterial;
     Material probeOrbMaterial;
     Material depthOrbMaterial;
+
+    ShaderPipeline solidColorShader;
+    Material solidColorMaterial; // Requires push constant for color (jank)
 
 #ifdef VBD
     ShaderPipeline vbdShader;
@@ -608,6 +620,16 @@ private:
         CreateDepthResources();
     }
 
+    void UpdateBoxLightUniform() {
+        assert(uBoxLightBuffer.size() == 1);
+        UBoxLight boxLight = {
+            .model = game.boxLightTransform,
+            .invModel = inverse(game.boxLightTransform),
+            .emission = game.boxLightColor
+        };
+        memcpy(uBoxLightBuffer.back().mappedMemory, &boxLight, sizeof(UBoxLight));
+    }
+
     void CreateUniformBuffers() {
         uniformBuffers.clear(); // In case this is used as 'recreate'
         uEntityBuffers.clear();
@@ -619,7 +641,7 @@ private:
             uniformBuffers.back().MapMemory();
 
             uEntityBuffers.emplace_back();
-            uEntityBuffers.back().Create(coreReferences, 2 * ceilToNearest(sizeof(UEntity), coreReferences.minUniformBufferOffsetAlignment), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+            uEntityBuffers.back().Create(coreReferences, 3 * ceilToNearest(sizeof(UEntity), coreReferences.minUniformBufferOffsetAlignment), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
             uEntityBuffers.back().MapMemory();
         }
 
@@ -634,6 +656,12 @@ private:
         uRaytraceSceneBuffer.back().Create(coreReferences, sizeof(URaytracedScene), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
         uRaytraceSceneBuffer.back().MapMemory();
         memcpy(uRaytraceSceneBuffer.back().mappedMemory, &raytracedScene, sizeof(URaytracedScene));
+
+        // Box Light
+        uBoxLightBuffer.emplace_back();
+        uBoxLightBuffer.back().Create(coreReferences, sizeof(UBoxLight), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostVisible);
+        uBoxLightBuffer.back().MapMemory();
+        UpdateBoxLightUniform();
     }
 
     // Need to create a pool for creating descriptor sets
@@ -728,7 +756,8 @@ private:
     ProbeCreator pc;
     BVHManager bvhManager;
     uPtr<BVHGPU> bvh;
-    Mesh sponzaRaytraceMesh;
+    // Mesh sponzaRaytraceMesh;
+    Mesh raytraceMesh;
     void InitVulkan() {
         CreateInstance();
         SetupDebugMessenger();
@@ -765,8 +794,12 @@ private:
         chairMesh.CreateFromOBJFile(coreReferences, "models/morrisChair.obj", true);
         cubeMesh.CreateFromOBJFile(coreReferences, "models/cube.obj");
         testRoom.CreateFromOBJFile(coreReferences, "models/testRoom.obj", true);
-        sponzaRaytraceMesh.CreateFromGLTFFile(coreReferences, "models/Sponza.glb", true);
-        std::cout << "Test Room Index Count: " << testRoom.indexCount << std::endl;
+#if SCENE == 0
+        raytraceMesh.CreateFromGLTFFile(coreReferences, "models/Sponza.glb", true);
+#elif SCENE == 1
+        raytraceMesh.CreateFromGLTFFile(coreReferences, "models/anotherBedroom.glb", true);
+#endif
+        std::cout << "Raytrace Room Tri Count: " << raytraceMesh.indexCount/3 << std::endl;
         
         // Textures
         whiteTexture.CreateFromFile(coreReferences, "textures/white.png", vk::Format::eR8G8B8A8Srgb);
@@ -802,14 +835,22 @@ private:
         GUIManager::RegisterUIFunction(std::bind(&TestGame::DrawUI, &game));
 
         // Build BVH
-        bvh = bvhManager.BuildBVH(coreReferences, sponzaRaytraceMesh);
+        bvh = bvhManager.BuildBVH(coreReferences, raytraceMesh);
 
         // Bake Probes
         UpdateUniformBuffer(0);
         auto beforeProbeCreateTime = std::chrono::high_resolution_clock::now();
-        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &sponzaRaytraceMesh, bvh.get(),
+#if SCENE == 0
+        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(), uvec3(20, 15, 20), vec3(0, 9.5f, 0), vec3(16.5 * 1.5f, 10 * 2.0f, 16.5 * 1.5f));
+#elif SCENE == 1
+        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(),
             // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(20, 15, 20), vec3(0,9.5f,0), vec3(16.5*1.5f, 10*2.0f, 16.5*1.5f));
+            uvec3(20, 10, 20), vec3(0.4f, 4.0f, 0.5f), vec3(16.0f, 11.0f, 14.0f)); //x -8 to 8 y -2 to 12 z -8 to 15
+#elif SCENE == 2
+        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(),
+            // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
+            uvec3(15, 5, 10), vec3(0, 5, 4), vec3(18.0f, 15.0f, 25.0f)); //x -8 to 8 y -2 to 12 z -8 to 15
+#endif
         auto afterProbeCreateTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(afterProbeCreateTime - beforeProbeCreateTime);
 
@@ -890,7 +931,11 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
         gltfPrimPBRShader.Create(coreReferences, "shaders/pbr-gltf-prim.spv", &swapSurfaceFormat.format, GetDepthFormat(), gltfPrimSParams, true, false);
-        sponzaPrims = Mesh::CreatePrimitiveMeshesFromGLTFFile(coreReferences, "models/Sponza.glb", &gltfPrimPBRShader, gltfPrimAbstractMParams, 2, false);
+#if SCENE == 0
+        breakfastRoomPrims = Mesh::CreatePrimitiveMeshesFromGLTFFile(coreReferences, "models/Sponza.glb", &gltfPrimPBRShader, gltfPrimAbstractMParams, 2, false);
+#elif SCENE == 1
+        breakfastRoomPrims = Mesh::CreatePrimitiveMeshesFromGLTFFile(coreReferences, "models/anotherBedroom.glb", &gltfPrimPBRShader, gltfPrimAbstractMParams, 2, false);
+#endif
 
         // Reflect Shader & Material
         vector reflectShaderParams = {
@@ -985,6 +1030,27 @@ private:
         };
         depthOrbShader.Create(coreReferences, "shaders/display-probe-depth-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), depthProbeShaderParams);
         depthOrbMaterial.Create(&depthOrbShader, coreReferences, depthProbeMaterialParams);
+
+        // Solid Color Material
+        vector solidColorSParams = {
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::DYNAMIC_UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
+        };
+        vector solidColorMParams = {
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
+            ShaderParameter::MParameter(ShaderParameter::UDynamicUniform {
+                .buffers = &uEntityBuffers,
+                .singleObjectSize =
+                static_cast<vk::DeviceSize>(
+                    ceilToNearest(
+                        sizeof(UEntity),
+                        coreReferences.minUniformBufferOffsetAlignment
+                    )
+                )
+            }),
+        };
+        solidColorShader.Create(coreReferences, "shaders/solid-color.spv", &swapSurfaceFormat.format, GetDepthFormat(), solidColorSParams, true, false, true, sizeof(vec4));
+        solidColorMaterial.Create(&solidColorShader, coreReferences, solidColorMParams);
 #else
         GUIManager::RegisterUIFunction(std::bind(&VBDManager::DrawUI, &vbdManager));
         vector vbdShaderParams = {
@@ -1030,7 +1096,8 @@ private:
         vk::DeviceSize alignment = GetUniformAlignment<UEntity>(coreReferences);
         vector<UEntity> entities = { // todo: management of entity indices or smth
             {.transform = game.raytraceSceneTransform},
-            {.transform = game.ballTransform}
+            {.transform = game.ballTransform},
+            {.transform = game.boxLightTransform},
         };
         for (int i = 0; i < entities.size(); i++) {
             memcpy(static_cast<char*>(uEntityBuffers[currFrame].mappedMemory) + i * alignment, &entities[i], sizeof(UEntity));
@@ -1094,15 +1161,22 @@ private:
         renderPass.EnqueueDraw(cubeMesh);
         // renderPass.EnqueueSetMaterial(testMaterial, currFrameIndex, { 0 });
         // renderPass.EnqueueDraw(testRoom);
-        //renderPass.EnqueueSetMaterial(blobMaterial, currFrameIndex, { 1 });
-        for (const Mesh& tentPrim : *sponzaPrims) {
-            renderPass.EnqueueSetMaterial(tentPrim.singlePrimitivePBR->mat, currFrameIndex, { 0 }, pc.GetPingPongSelect());
-            renderPass.EnqueueDraw(tentPrim);
+        renderPass.EnqueueSetMaterial(blobMaterial, currFrameIndex, { 1 }, pc.GetPingPongSelect());
+        renderPass.EnqueueDraw(blobMesh);
+        for (const Mesh& breakfastPrim : *breakfastRoomPrims) {
+            renderPass.EnqueueSetMaterial(breakfastPrim.singlePrimitivePBR->mat, currFrameIndex, { 0 }, pc.GetPingPongSelect());
+            renderPass.EnqueueDraw(breakfastPrim);
         }
         
         if (showDebugProbes) {
-            pc.probeVolume->DrawDebugProbeVolume(&renderPass, sphereMesh, probeOrbMaterial, currFrameIndex);
+            pc.probeVolume->DrawDebugProbeVolume(&renderPass, sphereMesh, probeOrbMaterial, currFrameIndex, pc.GetPingPongSelect());
         }
+
+        // Draw box light
+        vec4 boxLightCol = vec4(game.boxLightColor, 1.0f);
+        solidColorShader.EnqueuePushConstants(renderPass.currCmd, &boxLightCol);
+        renderPass.EnqueueSetMaterial(solidColorMaterial, currFrameIndex, { 2 });
+        renderPass.EnqueueDraw(cubeMesh);
 #else
         renderPass.EnqueueSetMaterial(skyboxMaterial, currFrameIndex);
         renderPass.EnqueueDraw(cubeMesh);
@@ -1145,6 +1219,8 @@ private:
             inputManager.Update(window);
             camera.Update(inputManager, dt);
             game.Update(time, dt);
+
+            UpdateBoxLightUniform();
             pc.ContinueFeedbackBake();
 
             DrawFrame();

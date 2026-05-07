@@ -45,6 +45,7 @@ public Intersection RayIntersectBVH(float3 ro, float3 rd, BVHMesh bvh) {
     int loopCount = 0;
 
     bool finished = false;
+    bool hitBackFace = false;
     while (!finished) {
         ++loopCount;
         if (currNode.triangleCount > 0) {
@@ -58,6 +59,7 @@ public Intersection RayIntersectBVH(float3 ro, float3 rd, BVHMesh bvh) {
                 if (tt < inter.t) {
                     inter.t = tt;
                     inter.triangleIndex = bvh.triangleRedirection[i];
+                    hitBackFace = dot(cross(v1 - v0, v2 - v0), rd) > 0.;
                 }
             }
             if (stackPtr == 0) {
@@ -102,6 +104,9 @@ public Intersection RayIntersectBVH(float3 ro, float3 rd, BVHMesh bvh) {
             }
         }
     }
+
+    if (hitBackFace)
+        inter.t = 0.;
 
     return inter;
 }

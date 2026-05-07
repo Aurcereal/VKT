@@ -7,23 +7,24 @@ import bvh_traversal;
 groupshared float3[64][9] sharedCoefficients;
 groupshared float4[64] sharedDepthSamples;
 
-[[vk::binding(0,0)]]ConstantBuffer<URaytracedScene> uRaytracedScene;
-[[vk::binding(1,0)]]SamplerCube skybox;
-[[vk::binding(2,0)]]StructuredBuffer<Vertex> worldVertices;
-[[vk::binding(3,0)]]StructuredBuffer<uint32_t> worldIndices;
-[[vk::binding(4,0)]]StructuredBuffer<uint32_t> triangleRedirection;
-[[vk::binding(5,0)]]StructuredBuffer<BVHNode> bvhNodes;
-[[vk::binding(6,0)]]StructuredBuffer<uint32_t> primToMaterialIndex;
+[[vk::binding(0, 0)]] ConstantBuffer<URaytracedScene> uRaytracedScene;
+[[vk::binding(1, 0)]] ConstantBuffer<UBoxLight> uBoxLight;
+[[vk::binding(2,0)]]SamplerCube skybox;
+[[vk::binding(3,0)]]StructuredBuffer<Vertex> worldVertices;
+[[vk::binding(4,0)]]StructuredBuffer<uint32_t> worldIndices;
+[[vk::binding(5,0)]]StructuredBuffer<uint32_t> triangleRedirection;
+[[vk::binding(6,0)]]StructuredBuffer<BVHNode> bvhNodes;
+[[vk::binding(7,0)]]StructuredBuffer<uint32_t> primToMaterialIndex;
 
-[[vk::binding(7, 0)]]Sampler2D albedoTexs[];
-[[vk::binding(8, 0)]]Sampler2D metalRoughnessTexs[];
-[[vk::binding(9, 0)]]Sampler2D AOTexs[];
-[[vk::binding(10, 0)]]ConstantBuffer<UPBRInfo> pbrInfo;
+[[vk::binding(8, 0)]]Sampler2D albedoTexs[];
+[[vk::binding(9, 0)]]Sampler2D metalRoughnessTexs[];
+[[vk::binding(10, 0)]]Sampler2D AOTexs[];
+[[vk::binding(11, 0)]]ConstantBuffer<UPBRInfo> pbrInfo;
 
-[[vk::binding(11,0)]]StructuredBuffer<float> skySh;
-[[vk::binding(12,0)]]RWStructuredBuffer<float> shCoefficients;
-[[vk::binding(13,0)]]RWStructuredBuffer<float> depthBuffer;
-[[vk::binding(14,0)]]ConstantBuffer<UProbeVolumeLayout> probeLayout;
+[[vk::binding(12,0)]]StructuredBuffer<float> skySh;
+[[vk::binding(13,0)]]RWStructuredBuffer<float> shCoefficients;
+[[vk::binding(14,0)]]RWStructuredBuffer<float> depthBuffer;
+[[vk::binding(15,0)]]ConstantBuffer<UProbeVolumeLayout> probeLayout;
 
 struct PushConstants {
     uint32_t currGroup;
@@ -90,11 +91,11 @@ void main(uint3 id: SV_DispatchThreadID,
     uint3 groupID3 : SV_GroupID) {
 
     // Get current probe
-    uint threadIDWithinGroup = threadIDWithinGroup3.y * 8 + threadIDWithinGroup3.x; // TODO: assuming 8x8
-    uint threadGroupID = groupID3.y * 32 + groupID3.x;                              // TODO: assuming 1024 total
+    uint threadIDWithinGroup = threadIDWithinGroup3.y * SQRT_THREADS_PER_GROUP + threadIDWithinGroup3.x; // TODO: assuming 8x8
+    uint threadGroupID = groupID3.y * SQRT_GROUP_SIZE + groupID3.x;                             
 
     uint probeCount = probeLayout.probeCounts.x * probeLayout.probeCounts.y * probeLayout.probeCounts.z;
-    uint probeToBake = pushConstants.currGroup * 1024 + threadGroupID; // TODO: assuming 1024
+    uint probeToBake = pushConstants.currGroup * GROUP_SIZE + threadGroupID;
     if (probeToBake >= probeCount) return; // Can't loop back around since the entire probe set is being done in parallel
     float3 probePos = probeIDToPos(probeToBake);
 
@@ -105,8 +106,8 @@ void main(uint3 id: SV_DispatchThreadID,
     bvh.triangleRedirection = triangleRedirection;
     bvh.nodes = bvhNodes;
 
-    float3 rd = uniformSphere(float2(rngi(id.x - id.y + 525 + pushConstants.currGroup * 23 - pushConstants.currBake * 7), rngi(id.x + id.y + 525 - pushConstants.currGroup * 15 + pushConstants.currBake * 9)));
-    float4 samp = SampleEnvironmentBVH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, albedoTexs, metalRoughnessTexs, AOTexs, primToMaterialIndex, pbrInfo, skySh, skybox);
+    float3 rd = uniformSphere(float2(rngi(2*threadIDWithinGroup + 525 + pushConstants.currGroup * 23 - pushConstants.currBake * 7), rngi(threadIDWithinGroup + 525 - pushConstants.currGroup * 15 + pushConstants.currBake * 9)));
+    float4 samp = SampleEnvironmentBVH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, albedoTexs, metalRoughnessTexs, AOTexs, primToMaterialIndex, pbrInfo, skySh, skybox, uBoxLight);
     float3 li = samp.xyz;
     float depth = samp.w;
 
@@ -115,9 +116,9 @@ void main(uint3 id: SV_DispatchThreadID,
     sharedDepthSamples[threadIDWithinGroup] = float4(rd, depth);
 
     // Updated shared sh
-    const float cosCo1 = 1.;//PI;
-    const float cosCo2 = 1.;//(2. / 3.) * PI;
-    const float cosCo3 = 1.;//PI * .25;
+    const float cosCo1 = PI;
+    const float cosCo2 = (2. / 3.) * PI;
+    const float cosCo3 = PI * .25;
 
     // There's also context dependent one in https://ppsloan.org/publications/StupidSH36.pdf that takes direction dominance into account
     float windowMults[3];

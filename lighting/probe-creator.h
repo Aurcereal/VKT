@@ -28,13 +28,13 @@ struct ProbeVolume {
 
 	vector<WBuffer> probeEntityUBO;
 
-	void DrawDebugProbeVolume(WRenderPass*, const Mesh& probeMesh, Material&, uint32_t setIndex);
+	void DrawDebugProbeVolume(WRenderPass*, const Mesh& probeMesh, Material&, uint32_t setIndex, bool pingPongSelection = false);
 	vector<WBuffer>* CreateEntityListUBO(const VulkanReferences& ref);
 };
 
 class ProbeCreator {
 public:
-	void Create(const VulkanReferences*, WTexture* skybox, vector<WBuffer>* uRaytracedSceneBuffer, Mesh* raytraceMesh, const BVHGPU*,
+	void Create(const VulkanReferences*, WTexture* skybox, vector<WBuffer>* uRaytracedSceneBuffer, vector<WBuffer>* uBoxLightBuffer, Mesh* raytraceMesh, const BVHGPU*,
 		uvec3 probeCounts, vec3 boundingBoxOrigin, vec3 boundingBoxSize);
 	uPtr<ProbeVolume> probeVolume;
 	

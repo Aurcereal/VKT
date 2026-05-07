@@ -73,7 +73,7 @@ WBuffer* ProbeCreator::GetSkyboxSH() {
 }
 
 // TODO: all these params def annoying so not having it, need to have some struct to represent the world
-void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<WBuffer>* uRaytracedSceneBuffer, Mesh* raytraceMesh, const BVHGPU* bvh,
+void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<WBuffer>* uRaytracedSceneBuffer, vector<WBuffer>* uBoxLightBuffer, Mesh* raytraceMesh, const BVHGPU* bvh,
 	uvec3 probeCounts, vec3 boundingBoxOrigin, vec3 boundingBoxSize) {
 	this->ref = ref;
 
@@ -151,6 +151,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	// Create Environment Probe Baker
 	vector envShaParams = {
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
@@ -168,6 +169,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	};
 	vector envMatParams = {
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uRaytracedSceneBuffer}),
+		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uBoxLightBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = skybox}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->vertexBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->indexBuffer}),
@@ -188,6 +190,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	// Create feedback baker shader
 	vector feedbackEnvShaParams = {
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
@@ -206,6 +209,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	};
 	vector feedbackEnvMatParams = {
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uRaytracedSceneBuffer}),
+		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uBoxLightBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = skybox}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->vertexBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->indexBuffer}),

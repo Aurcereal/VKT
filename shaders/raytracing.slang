@@ -3,6 +3,7 @@ import PBR;
 import bvh_traversal;
 import misc_structs;
 import probe_helper;
+import intersection_helper;
 
 public struct URaytracedScene {
     public float4x4 model;
@@ -82,8 +83,19 @@ public float4 SampleEnvironmentBVH(float3 ro, float3 rd,
                                    ConstantBuffer<UPBRInfo> pbrInfo,
 
                                    StructuredBuffer<float> skyboxSh,
-                                   SamplerCube skybox
+                                   SamplerCube skybox,
+
+                                   ConstantBuffer<UBoxLight> boxLight
     ) {
+
+    // Trace Box Light
+    float3 bro = mul(boxLight.invModel, float4(ro, 1.)).xyz;
+    float3 brd = mul(boxLight.invModel, float4(rd, 0.)).xyz;
+    float bt = IntersectAABB(bro, brd, float3(-1.0), float3(1.0), 1e4);
+    if (bt < 1e4) {
+        return float4(boxLight.emission, bt);
+    }
+
     float3 lro = mul(invModel, float4(ro, 1.)).xyz;
     float3 lrd = mul(invModel, float4(rd, 0.)).xyz;
     Intersection inter = RayIntersectBVH(lro, lrd, bvhMesh);
@@ -138,11 +150,23 @@ public float4 SampleEnvironmentBVHEnvSH(float3 ro, float3 rd,
                                     ConstantBuffer<UProbeVolumeLayout> probeLayout,
                                     SamplerCube skybox,
 
+                                    ConstantBuffer<UBoxLight> boxLight,
+
                                     int ignoredProbe
     ) {
+
     float3 lro = mul(invModel, float4(ro, 1.)).xyz;
     float3 lrd = mul(invModel, float4(rd, 0.)).xyz;
     Intersection inter = RayIntersectBVH(lro, lrd, bvhMesh);
+
+    // Trace Box Light
+    float3 bro = mul(boxLight.invModel, float4(ro, 1.)).xyz;
+    float3 brd = mul(boxLight.invModel, float4(rd, 0.)).xyz;
+    float bt = IntersectAABB(bro, brd, float3(-1.0), float3(1.0), 1e4);
+    if (bt < min(1e4, inter.t)) {
+        return float4(boxLight.emission, bt);
+    }
+
     if (inter.t < 1e4) {
         float3 lHitPnt = lro + lrd * inter.t;
 

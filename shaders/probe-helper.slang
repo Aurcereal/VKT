@@ -1,5 +1,10 @@
 module ProbeHelper;
 
+public static const uint32_t SQRT_THREADS_PER_PASS = (256);
+public static const uint32_t SQRT_THREADS_PER_GROUP = (8);
+public static const uint32_t SQRT_GROUP_SIZE = (SQRT_THREADS_PER_PASS / SQRT_THREADS_PER_GROUP);
+public static const uint32_t GROUP_SIZE = (SQRT_GROUP_SIZE * SQRT_GROUP_SIZE);
+
 public struct UProbeVolumeLayout {
     public float4x4 invTransform;
     public float4x4 transform;

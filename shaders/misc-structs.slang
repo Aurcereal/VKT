@@ -18,3 +18,9 @@ public struct UPBRInfo {
     public bool hasMetallicRoughnessTexture;
     public bool hasAOTexture;
 };
+
+public struct UBoxLight {
+    public float4x4 model;
+    public float4x4 invModel;
+    public float3 emission;
+};

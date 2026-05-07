@@ -1,7 +1,6 @@
 #include "mesh.h"
 #include "tiny_gltf.h"
 #include <iostream>
-#include <glm/gtc/type_ptr.hpp>
 #include "tiny_obj_loader.h"
 
 void Mesh::CreateFromOBJFile(const VulkanReferences& ref, const std::string& path, bool isStorageBuffer) {
@@ -281,7 +280,7 @@ void Mesh::CreateFromGLTFPrimitive(const VulkanReferences& ref, ShaderPipeline* 
 
     const auto& pbr = mat.pbrMetallicRoughness;
     singlePrimitivePBR = mkU<SinglePrimitivePBRInfo>();
-    singlePrimitivePBR->baseColorMult = pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data()));
+    singlePrimitivePBR->baseColorMult = vec4(1.0f);// pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data()));
 
     UPBRInfo pbrInfo = {
         .albedoMult = singlePrimitivePBR->baseColorMult,
