@@ -5,7 +5,7 @@
 float BVHBuilder::EvaluateSAH(const BVHNode* node, int splitAxis, float splitPos) {
 	vec3 leftLowExtent, leftHighExtent, rightLowExtent, rightHighExtent;
 	leftLowExtent = rightLowExtent = vec3(std::numeric_limits<float>::max());
-	leftHighExtent = rightHighExtent = vec3(std::numeric_limits<float>::min());
+	leftHighExtent = rightHighExtent = vec3(-std::numeric_limits<float>::max());
 
 	uint32_t start = node->childStartIndex; uint32_t end = node->childStartIndex + node->triangleCount;
 	uint32_t leftCount = 0, rightCount = 0;
@@ -37,6 +37,7 @@ float BVHBuilder::EvaluateSAH(const BVHNode* node, int splitAxis, float splitPos
 		totalCost += rightCount * boundingBoxArea(rightLowExtent, rightHighExtent);
 	}
 	assert(totalCost >= 0);
+	assert(leftCount > 0 && rightCount > 0);
 
 	return totalCost;
 }
@@ -79,9 +80,10 @@ float BVHBuilder::ChooseSplitPlaneSAH(const BVHNode* node, int* pAxis, float* pP
 
 	// Get centoroid bound
 	vec3 centroidLowExtent = vec3(std::numeric_limits<float>::max());
-	vec3 centroidHighExtent = vec3(std::numeric_limits<float>::min());
+	vec3 centroidHighExtent = vec3(-std::numeric_limits<float>::max());
 	uint32_t start = node->childStartIndex; uint32_t end = node->childStartIndex + node->triangleCount;
 	for (uint32_t i = start; i < end; i++) {
+		// TODO: don't need to do centroid bound calculation in EvaluateSAH as well, can pass it in
 		const Triangle& t = GetTriangle(i);
 		centroidLowExtent = min(centroidLowExtent, t.centroid);
 		centroidHighExtent = max(centroidHighExtent, t.centroid);
@@ -93,6 +95,7 @@ float BVHBuilder::ChooseSplitPlaneSAH(const BVHNode* node, int* pAxis, float* pP
 	const int divisions = 8;
 	for (int a = 0; a < 3; a++) {
 		float len = centroidHighExtent[a] - centroidLowExtent[a];
+		if (len < 0.00001) continue;
 		for (int split = 1; split < divisions; split++) {
 			float tryPos = centroidLowExtent[a] + len * (1.0f * split) / (1.0f * divisions);
 
@@ -104,7 +107,10 @@ float BVHBuilder::ChooseSplitPlaneSAH(const BVHNode* node, int* pAxis, float* pP
 		}
 	}
 
-	assert(currCost > 0.0f);
+	if (currCost < 0.0) {
+		// Didn't find any candidate, zero volume
+		return std::numeric_limits<float>::max();
+	}
 
 	*pPos = currPos;
 	*pAxis = currAxis;
@@ -123,7 +129,7 @@ void BVHBuilder::Subdivide(BVHNode* node, int depth) {
 
 	// Get split plane & return if it's not worth it
 	int splitAxis;  float splitPos;
-	if (depth >= 40 || node->triangleCount <= 60 || ChooseSplitPlaneSAH(node, &splitAxis, &splitPos) >= currCost) {
+	if (/*depth >= 40+20 || node->triangleCount <= 60-30 || */node->triangleCount <= 6 || ChooseSplitPlaneSAH(node, &splitAxis, &splitPos) >= currCost) {
 		++leafCount;
 		std::cout << "MADE LEAF - \t Tri Count: " << node->triangleCount << "\t Depth: " << depth << std::endl;
 		return;
@@ -188,7 +194,7 @@ void BVHBuilder::UpdateNodeBounds(BVHNode* node) {
 		return;
 	}
 	node->lowExtent = vec3(std::numeric_limits<float>::max());
-	node->highExtent = vec3(std::numeric_limits<float>::min());
+	node->highExtent = vec3(-std::numeric_limits<float>::max());
 	uint32_t start = node->childStartIndex; uint32_t end = node->childStartIndex + node->triangleCount;
 	for (uint32_t i = start; i<end; i++) {
 		const Triangle& t = GetTriangle(i);
