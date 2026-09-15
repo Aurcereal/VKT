@@ -24,3 +24,11 @@ public struct UBoxLight {
     public float4x4 invModel;
     public float3 emission;
 };
+
+public struct PrimitiveData {
+    public float4 albedoMult;
+    public int albedoTextureIndex;
+    public int metallicRoughnessTextureIndex;
+
+    public float2 padding;
+};

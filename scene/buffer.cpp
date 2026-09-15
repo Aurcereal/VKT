@@ -55,6 +55,16 @@ void WBuffer::SetData(const VulkanReferences& ref, void* data, vk::DeviceSize si
     CopyFrom(ref, stagingBuffer, size, dstOffset);
 }
 
+ShaderParameter::SParameter WBuffer::GetSParameter(vk::ShaderStageFlagBits v)
+{
+    return ShaderParameter::SParameter{ .type = ShaderParameter::Type::BUFFER, .visibility = v };
+}
+
+ShaderParameter::MParameter WBuffer::GetMParameter()
+{
+    return ShaderParameter::MParameter(ShaderParameter::UBuffer{ .buffer = this });
+}
+
 void* WBuffer::MapMemory() {
     assert(!isMapped);
     isMapped = true;

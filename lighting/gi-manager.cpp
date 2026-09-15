@@ -30,7 +30,7 @@ void GIManager::GenerateSHCoefficients(WTexture* skybox) {
 	};
 
 	ComputePipeline generateShader; // need better shader name like sh generator lol
-	generateShader.Create(*ref, "shaders/spherical-harmonics.spv", sParams, mParams, uvec3(8, 8, 1));
+	generateShader.Create(*ref, "shaders/compiled/spherical-harmonics.spv", sParams, mParams, uvec3(8, 8, 1));
 
 	ComputeDispatcher dispatcher;
 	dispatcher.Create(*ref);

@@ -95,7 +95,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{.texture = skybox}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &shScratchBuffer}),
 	};
-	bakeSkyboxProbe.Create(*ref, "shaders/spherical-harmonics-sky.spv", skyShaParams, skyMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PSkyboxBakeInfo));
+	bakeSkyboxProbe.Create(*ref, "shaders/compiled/spherical-harmonics-sky.spv", skyShaParams, skyMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PSkyboxBakeInfo));
 
 	// Create Skybox SH
 	skyboxSh = mkU<WBuffer>();
@@ -185,7 +185,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->depthBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &probeVolume->probeLayoutUBO}),
 	};
-	bakeEnvironmentProbe.Create(*ref, "shaders/spherical-harmonics-env-prog.spv", envShaParams, envMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PBakePassInfo));
+	bakeEnvironmentProbe.Create(*ref, "shaders/compiled/spherical-harmonics-env-prog.spv", envShaParams, envMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PBakePassInfo));
 
 	// Create feedback baker shader
 	vector feedbackEnvShaParams = {
@@ -227,7 +227,7 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->depthBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &probeVolume->probeLayoutUBO}),
 	};
-	feedbackBakeEnvironmentProbe.Create(*ref, "shaders/spherical-harmonics-env-feedback.spv", feedbackEnvShaParams, feedbackEnvMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PBakePassInfo));
+	feedbackBakeEnvironmentProbe.Create(*ref, "shaders/compiled/spherical-harmonics-env-feedback.spv", feedbackEnvShaParams, feedbackEnvMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PBakePassInfo));
 
 	// Create depth texture creator
 	vector depthTexCreatorSParams = {
@@ -240,13 +240,13 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::MParameter(ShaderParameter::UStorageTexture{.texture = &probeVolume->octahedralDepthMap}),
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &probeVolume->probeLayoutUBO}),
 	};
-	convertDepthBufferToTexture.Create(*ref, "shaders/depth-buffer-to-texture.spv", depthTexCreatorSParams, depthTexCreatorMParams, uvec3(16, 16, 1));
+	convertDepthBufferToTexture.Create(*ref, "shaders/compiled/depth-buffer-to-texture.spv", depthTexCreatorSParams, depthTexCreatorMParams, uvec3(16, 16, 1));
 
 	// Bake
 	BakeEnvironmentProbes(probeCounts, transform);
 
 	// Setup feedback
-	SetupFeedbackBake();
+	// SetupFeedbackBake();
 }
 
 void ProbeCreator::AccumulateScratchIntoBuffer(WBuffer* buf, vk::DeviceSize dstOffset) {
@@ -285,7 +285,7 @@ void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform)
 
 	// Bake all probes
 	uint32_t probeCount = probeCounts.x * probeCounts.y * probeCounts.z;
-	uint32_t bakeCount = 50; // TODO: need even more maybe or sh improvement
+	uint32_t bakeCount = 400; // TODO: need even more maybe or sh improvement
 	uint32_t groupCount = ceilDiv(probeCount, GROUP_SIZE);
 	std::cout << "Probe Count: " << probeCount << " Group Count: " << groupCount << std::endl;
 
@@ -367,7 +367,7 @@ void ProbeCreator::ContinueFeedbackBake() {
 			currGroup -= groupCount;
 
 			// Finished the bake, swap buffer and go again
-			pingPongSelect = !pingPongSelect;
+			if(feedbackBakeCount % 16 == 0) pingPongSelect = !pingPongSelect;
 		}
 		struct PBakePassInfo bakePassInfo = {
 			.currGroup = currGroup,

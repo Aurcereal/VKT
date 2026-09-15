@@ -26,15 +26,6 @@ struct VSOutput {
     float3 norm;
 };
 
-struct FSInput {
-    float4 position : SV_Position;
-    float3 worldPos;
-    float3 color;
-    float2 uv;
-    float3 norm;
-    uint primID : SV_PrimitiveID;
-};
-
 [shader("vertex")]
 VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
     VSOutput vOut;
@@ -60,7 +51,7 @@ StructuredBuffer<float> skySh;
 ConstantBuffer<UProbeVolumeLayout> probeLayout;
 
 [shader("fragment")]
-float4 fragMain(FSInput o) : SV_Target
+float4 fragMain(VSOutput o) : SV_Target
 {
     float4x4 viewTranspose = transpose(ubo.view);
     float3 camPos = -mul(float3x3(viewTranspose), viewTranspose[3].xyz);

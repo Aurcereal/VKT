@@ -9,6 +9,7 @@
 #include <chrono>
 
 #include "scene/buffer.h"
+#include "scene/uniform-buffer.h"
 #include "scene/texture.h"
 #include "core/command-helper.h"
 #include "core/memory-helper.h"
@@ -753,6 +754,80 @@ private:
         }
     }
 
+    Mesh quadMesh;
+    Material quadMaterial;
+    ShaderPipeline quadShader;
+    UniformBuffer uRaytraceCameraInfo;
+
+    struct RaytraceCameraInfo {
+        vec4 position;
+        vec4 right;
+        vec4 up;
+        vec4 forward;
+        float fov;
+        float aspect;
+    };
+
+    void SetupQuad() {
+        // Setup Mesh
+        vector<vec3> positions = { vec3(-1, -1, 0), vec3(1, -1, 0), vec3(-1, 1, 0), vec3(1, 1, 0) };
+        vector<vec3> colors = { vec3(1), vec3(1), vec3(1), vec3(1) };
+        vector<vec3> normals = { vec3(1), vec3(1), vec3(1), vec3(1) };
+
+        vector<uint32_t> indices = { 0, 1, 3, 0, 3, 2 };
+
+        quadMesh.CreateFromArrays(coreReferences, positions, colors, normals, indices);
+
+        // Setup Uniform
+        uRaytraceCameraInfo.Create(coreReferences, sizeof(RaytraceCameraInfo), true);
+
+        // Setup Shader & Material
+        vector shaderParams = {
+            uRaytraceCameraInfo.GetSParameter(vk::ShaderStageFlagBits::eFragment),
+
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+
+            raytraceMesh.vertexBuffer.GetSParameter(vk::ShaderStageFlagBits::eFragment),
+            raytraceMesh.indexBuffer.GetSParameter(vk::ShaderStageFlagBits::eFragment),
+            bvh->triangleRedirectionBuffer.GetSParameter(vk::ShaderStageFlagBits::eFragment),
+            bvh->nodeBuffer.GetSParameter(vk::ShaderStageFlagBits::eFragment),
+
+            raytraceMesh.multiPrimitivePBR2->triToPrim.GetSParameter(vk::ShaderStageFlagBits::eFragment),
+            raytraceMesh.multiPrimitivePBR2->primData.GetSParameter(vk::ShaderStageFlagBits::eFragment),
+
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eFragment },
+
+        };
+        vector materialParams = {
+            uRaytraceCameraInfo.GetMParameter(),
+
+            ShaderParameter::MParameter(ShaderParameter::UUniform{.uniformBuffers = &uRaytraceSceneBuffer }),
+            ShaderParameter::MParameter(ShaderParameter::UUniform{.uniformBuffers = &uBoxLightBuffer }),
+
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{.texture = &testCubeMap }),
+
+            raytraceMesh.vertexBuffer.GetMParameter(),
+            raytraceMesh.indexBuffer.GetMParameter(),
+            bvh->triangleRedirectionBuffer.GetMParameter(),
+            bvh->nodeBuffer.GetMParameter(),
+
+            raytraceMesh.multiPrimitivePBR2->triToPrim.GetMParameter(),
+            raytraceMesh.multiPrimitivePBR2->primData.GetMParameter(),
+
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray{.textures = &raytraceMesh.multiPrimitivePBR2->textures}),
+        };
+
+        quadShader.Create(coreReferences, "shaders/compiled/raytraced-view.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams, false, true);
+        quadMaterial.Create(&quadShader, coreReferences, materialParams);
+    }
+
+    void DrawQuad(WRenderPass& renderPass, int setIndex) {
+        renderPass.EnqueueSetMaterial(quadMaterial, setIndex);
+        renderPass.EnqueueDraw(quadMesh);
+    }
+
     ProbeCreator pc;
     BVHManager bvhManager;
     uPtr<BVHGPU> bvh;
@@ -788,6 +863,11 @@ private:
             static_cast<VkFormat>(swapSurfaceFormat.format), static_cast<VkFormat>(GetDepthFormat())
         );
 
+
+
+
+
+
         // Meshes
         blobMesh.CreateFromOBJFile(coreReferences, "models/blob.obj", true);
         sphereMesh.CreateFromOBJFile(coreReferences, "models/smoothSphere.obj", true);
@@ -798,6 +878,8 @@ private:
         raytraceMesh.CreateFromGLTFFile(coreReferences, "models/Sponza.glb", true);
 #elif SCENE == 1
         raytraceMesh.CreateFromGLTFFile(coreReferences, "models/anotherBedroom.glb", true);
+#elif SCENE == 2
+        raytraceMesh.CreateFromOBJFile(coreReferences, "models/testRoom.obj", true);
 #endif
         std::cout << "Raytrace Room Tri Count: " << raytraceMesh.indexCount/3 << std::endl;
         
@@ -826,7 +908,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
         };
-        skyboxShader.Create(coreReferences, "shaders/skybox.spv", &swapSurfaceFormat.format, GetDepthFormat(), skyboxShaderParams, false, true);
+        skyboxShader.Create(coreReferences, "shaders/compiled/skybox.spv", &swapSurfaceFormat.format, GetDepthFormat(), skyboxShaderParams, false, true);
         skyboxMaterial.Create(&skyboxShader, coreReferences, skyboxMaterialParams);
 
 #ifndef VBD
@@ -838,7 +920,7 @@ private:
         bvh = bvhManager.BuildBVH(coreReferences, raytraceMesh);
 
         // Bake Probes
-        UpdateUniformBuffer(0);
+        UpdateUniformBuffers(0);
         auto beforeProbeCreateTime = std::chrono::high_resolution_clock::now();
 #if SCENE == 0
         pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(), uvec3(20, 15, 20), vec3(0, 9.5f, 0), vec3(16.5 * 1.5f, 10 * 2.0f, 16.5 * 1.5f));
@@ -891,7 +973,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
-        shaderPipeline.Create(coreReferences, "shaders/pbr-obj.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams, true, false);
+        shaderPipeline.Create(coreReferences, "shaders/compiled/pbr-obj.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams, true, false);
         testMaterial.Create(&shaderPipeline, coreReferences, materialParams);
 
         vector gltfPrimSParams = {
@@ -920,17 +1002,20 @@ private:
                     )
                 )
             }),
-            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}), // optional, so we have placeholders
-            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}),
-            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}),
-            ShaderParameter::MParameter(ShaderParameter::UUniform {}), // not optional
+
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}), // TO BE SET BY MESH
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}), // TO BE SET BY MESH
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &whiteTexture}), // TO BE SET BY MESH
+            ShaderParameter::MParameter(ShaderParameter::UUniform {}), // TO BE SET BY MESH
+
+            // TODO: all of this stuff should be grouped into sets to not have to re-enter it every time, precreated desc sets
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
             ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer {.bufferA = &pc.probeVolume->shCoefficientsA, .bufferB = &pc.probeVolume->shCoefficientsB }),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
-        gltfPrimPBRShader.Create(coreReferences, "shaders/pbr-gltf-prim.spv", &swapSurfaceFormat.format, GetDepthFormat(), gltfPrimSParams, true, false);
+        gltfPrimPBRShader.Create(coreReferences, "shaders/compiled/pbr-gltf-prim.spv", &swapSurfaceFormat.format, GetDepthFormat(), gltfPrimSParams, true, false);
 #if SCENE == 0
         breakfastRoomPrims = Mesh::CreatePrimitiveMeshesFromGLTFFile(coreReferences, "models/Sponza.glb", &gltfPrimPBRShader, gltfPrimAbstractMParams, 2, false);
 #elif SCENE == 1
@@ -975,7 +1060,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH() })
         };
-        reflectShader.Create(coreReferences, "shaders/reflect.spv", &swapSurfaceFormat.format, GetDepthFormat(), reflectShaderParams);
+        reflectShader.Create(coreReferences, "shaders/compiled/reflect.spv", &swapSurfaceFormat.format, GetDepthFormat(), reflectShaderParams);
         reflectMaterial.Create(&reflectShader, coreReferences, reflectMaterialParams);
 
         // Only different to testMaterial is white albedo
@@ -1028,7 +1113,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->depthBuffer}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
         };
-        depthOrbShader.Create(coreReferences, "shaders/display-probe-depth-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), depthProbeShaderParams);
+        depthOrbShader.Create(coreReferences, "shaders/compiled/display-probe-depth-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), depthProbeShaderParams);
         depthOrbMaterial.Create(&depthOrbShader, coreReferences, depthProbeMaterialParams);
 
         // Solid Color Material
@@ -1049,7 +1134,7 @@ private:
                 )
             }),
         };
-        solidColorShader.Create(coreReferences, "shaders/solid-color.spv", &swapSurfaceFormat.format, GetDepthFormat(), solidColorSParams, true, false, true, sizeof(vec4));
+        solidColorShader.Create(coreReferences, "shaders/compiled/solid-color.spv", &swapSurfaceFormat.format, GetDepthFormat(), solidColorSParams, true, false, true, sizeof(vec4));
         solidColorMaterial.Create(&solidColorShader, coreReferences, solidColorMParams);
 #else
         GUIManager::RegisterUIFunction(std::bind(&VBDManager::DrawUI, &vbdManager));
@@ -1071,12 +1156,13 @@ private:
                 )
             })
         };
-        vbdShader.Create(coreReferences, "shaders/vbd-shader.spv", &swapSurfaceFormat.format, GetDepthFormat(), vbdShaderParams);
+        vbdShader.Create(coreReferences, "shaders/compiled/vbd-shader.spv", &swapSurfaceFormat.format, GetDepthFormat(), vbdShaderParams);
         vbdMaterial.Create(&vbdShader, coreReferences, vbdMaterialParams);
 
         vbdManager.Initialize(coreReferences);
 #endif
         
+        SetupQuad();
     }
 
     Camera camera = Camera(vec3(0), static_cast<float>(WIDTH) / static_cast<float>(HEIGHT), glm::radians(45.0f));
@@ -1092,7 +1178,7 @@ private:
         dt = time - prevTime;
     }
 
-    void UpdateUniformBuffer(uint32_t currFrame) {
+    void UpdateUniformBuffers(uint32_t currFrame) {
         vk::DeviceSize alignment = GetUniformAlignment<UEntity>(coreReferences);
         vector<UEntity> entities = { // todo: management of entity indices or smth
             {.transform = game.raytraceSceneTransform},
@@ -1111,7 +1197,22 @@ private:
 
         // TODO: how are we sure that the uniform buffer does get written to after this?  i think vulkan actually ensures the cpu data is same when mapped?
         memcpy(uniformBuffers[currFrame].mappedMemory, &ubo, sizeof(ubo));
+
+        // Raytrace Camera Info
+        if (uRaytraceCameraInfo.created) {
+            RaytraceCameraInfo raytraceCameraInfo = {
+                .position = vec4(camera.pos, 1),
+                .right = vec4(camera.ri, 1),
+                .up = vec4(camera.up, 1),
+                .forward = vec4(camera.fo, 1),
+                .fov = camera.fovYRadians,
+                .aspect = camera.aspect
+            };
+            uRaytraceCameraInfo.SetData(static_cast<int>(currFrame), &raytraceCameraInfo);
+        }
     }
+
+    
 
     void DrawFrame() {
         // Wait for prev frame to finish
@@ -1138,7 +1239,7 @@ private:
 
         renderPass.WaitForFinish();
 
-        UpdateUniformBuffer(currFrameIndex);
+        UpdateUniformBuffers(currFrameIndex);
 
         // Grab img from framebuffer now that prev frame done
         // presentCompleteSemaphore is signaled when image is finished being used
@@ -1177,6 +1278,8 @@ private:
         solidColorShader.EnqueuePushConstants(renderPass.currCmd, &boxLightCol);
         renderPass.EnqueueSetMaterial(solidColorMaterial, currFrameIndex, { 2 });
         renderPass.EnqueueDraw(cubeMesh);
+
+        DrawQuad(renderPass, currFrameIndex);
 #else
         renderPass.EnqueueSetMaterial(skyboxMaterial, currFrameIndex);
         renderPass.EnqueueDraw(cubeMesh);
@@ -1221,7 +1324,7 @@ private:
             game.Update(time, dt);
 
             UpdateBoxLightUniform();
-            pc.ContinueFeedbackBake();
+            // pc.ContinueFeedbackBake();
 
             DrawFrame();
         }

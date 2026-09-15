@@ -4,20 +4,16 @@ import sh_sampling;
 import probe_helper;
 import misc_structs;
 
-ConstantBuffer<UCamera> ubo;
 
 struct UEntity {
     float4x4 transform;
 };
-ConstantBuffer<UEntity> uTransform;
-
 struct VSInput {
     float3 position;
     float3 color;
     float2 uv;
     float3 norm;
 };
-
 struct VSOutput {
     float4 position : SV_Position;
     float3 worldPos;
@@ -25,7 +21,6 @@ struct VSOutput {
     float2 uv;
     float3 norm;
 };
-
 struct FSInput {
     float4 position : SV_Position;
     float3 worldPos;
@@ -34,6 +29,19 @@ struct FSInput {
     float3 norm;
     uint primID : SV_PrimitiveID;
 };
+
+ConstantBuffer<UCamera> ubo;
+ConstantBuffer<UEntity> uTransform;
+
+Sampler2D albedoSampler;
+Sampler2D metallicRoughnessSampler;
+Sampler2D aoSampler;
+
+SamplerCube skybox;
+StructuredBuffer<float> shCoefficients;
+StructuredBuffer<float> skySh;
+[[vk::image_format("r32f")]] Sampler2D<float> depthTexture;
+ConstantBuffer<UProbeVolumeLayout> probeLayout;
 
 [shader("vertex")]
 VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
@@ -56,15 +64,6 @@ struct PushConstants {
     // bool hasAOTexture;
 };
 [[vk::push_constant]] ConstantBuffer<PushConstants> pushConstants;
-Sampler2D albedoSampler;
-Sampler2D metallicRoughnessSampler;
-Sampler2D aoSampler;
-
-SamplerCube skybox;
-StructuredBuffer<float> shCoefficients;
-StructuredBuffer<float> skySh;
-[[vk::image_format("r32f")]] Sampler2D<float> depthTexture;
-ConstantBuffer<UProbeVolumeLayout> probeLayout;
 
 [shader("fragment")]
 float4 fragMain(FSInput o) : SV_Target

@@ -111,6 +111,88 @@ public Intersection RayIntersectBVH(float3 ro, float3 rd, BVHMesh bvh) {
     return inter;
 }
 
+public Intersection RayIntersectBVHStats(float3 ro, float3 rd, BVHMesh bvh, out int loopCount) {
+    BVHNode traversalStack[STACK_SIZE];
+    uint stackPtr = 0;
+    BVHNode currNode = bvh.nodes[0];
+
+    Intersection inter;
+    inter.t = 1e4;
+    inter.triangleIndex = 0;
+    loopCount = 0;
+
+    bool finished = false;
+    bool hitBackFace = false;
+    while (!finished) {
+        
+        if (currNode.triangleCount > 0) {
+            // Is Leaf
+            uint32_t start = currNode.childStartIndex; uint32_t end = start + currNode.triangleCount;
+            for (uint32_t i = start; i < end; ++i) {
+                ++loopCount;
+                // Intersect triangles
+                float3 v0, v1, v2;
+                GetTriangle(bvh, i, v0, v1, v2);
+                float tt = RayTriangleIntersection(ro, rd, v0, v1, v2);
+                if (tt < inter.t) {
+                    inter.t = tt;
+                    inter.triangleIndex = bvh.triangleRedirection[i];
+                    hitBackFace = dot(cross(v1 - v0, v2 - v0), rd) > 0.;
+                }
+            }
+            if (stackPtr == 0) {
+                finished = true;
+                continue;
+            } else {
+                currNode = traversalStack[--stackPtr];
+                continue;
+            }
+        }
+
+        if (stackPtr == STACK_SIZE) {
+            currNode = traversalStack[--stackPtr];
+            continue;
+        }
+
+        // Intersect children
+        BVHNode leftChild = bvh.nodes[currNode.childStartIndex];
+        BVHNode rightChild = bvh.nodes[currNode.childStartIndex + 1];
+
+        float leftInter = IntersectAABB(ro, rd, leftChild.lowExtent, leftChild.highExtent, inter.t);
+        float rightInter = IntersectAABB(ro, rd, rightChild.lowExtent, rightChild.highExtent, inter.t);
+
+        // leftChild will be the closest
+        if (rightInter < leftInter) {
+            Swap(leftInter, rightInter);
+            Swap(leftChild, rightChild);
+        }
+
+        // TODO: bad
+        if (leftInter > rightInter)
+            return inter;
+
+        // Add to stack
+        if (leftInter >= 1e4) {
+            if (stackPtr == 0) {
+                finished = true;
+                continue;
+            } else {
+                currNode = traversalStack[--stackPtr];
+            }
+        } else {
+            currNode = leftChild;
+            if (rightInter < 1e4) {
+                traversalStack[stackPtr++] = rightChild;
+            }
+        }
+    }
+
+    if (hitBackFace)
+        inter.t = 0.;
+
+    return inter;
+}
+
 // IntersectAABB(const float3 ro, const float3 rd, const float3 bmin, const float3 bmax, const float currT)
 
 //     public Intersection RayIntersectBVH(float3 ro, float3 rd, BVHMesh bvh) {

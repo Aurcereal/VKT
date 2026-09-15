@@ -47,6 +47,20 @@ namespace std {
     };
 }
 
+struct MaterialData {
+    vec4 albedoMult;
+    int albedoTextureIndex;
+    int metallicRoughnessIndex;
+
+    float padding[2];
+};
+
+struct MultiPrimitiveMaterialInfo {
+    vector<WTexture> textures;
+    WBuffer primData; // <PrimitiveData>
+    WBuffer triToPrim;
+};
+
 struct MultiPrimitivePBRInfo {
     vec4 baseColorMult;
     vector<WTexture> baseColorTexs;
@@ -59,12 +73,12 @@ struct MultiPrimitivePBRInfo {
 };
 
 struct SinglePrimitivePBRInfo {
-    vec4 baseColorMult;
     WTexture baseColorTex;
     WTexture metallicRoughnessTex;
     WTexture aoTex;
-    Material mat;
     vector<WBuffer> uPbrInfo;
+
+    Material mat;
 };
 
 namespace tinygltf {
@@ -91,6 +105,7 @@ public:
     const vector<uint32_t>& GetIndices() const;
 
     uPtr<MultiPrimitivePBRInfo> multiPrimitivePBR;
+    uPtr<MultiPrimitiveMaterialInfo> multiPrimitivePBR2;
     uPtr<SinglePrimitivePBRInfo> singlePrimitivePBR;
 private:
     friend class WRenderPass;

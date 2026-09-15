@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defines.h"
+#include "shader-parameter.h"
 
 class WBuffer {
 public:
@@ -17,9 +18,10 @@ public:
 	vk::raii::Buffer buffer = nullptr;
 	vk::raii::DeviceMemory bufferMemory = nullptr;
 	vk::DeviceSize bufferSize;
+
+	ShaderParameter::SParameter GetSParameter(vk::ShaderStageFlagBits);
+	ShaderParameter::MParameter GetMParameter();
 private:
-	
-	
 
 	bool isMapped = false;
 };

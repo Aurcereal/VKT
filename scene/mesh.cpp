@@ -172,6 +172,7 @@ void GetGLTFIndices(const tinygltf::Model& model, const tinygltf::Primitive& pri
     }
 }
 
+vector<uint32_t> triToMaterialIndex;
 void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::string& path) {
     assert(vertices.size() == 0 && indices.size() == 0);
 
@@ -193,6 +194,8 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
     }
 
     multiPrimitivePBR = mkU<MultiPrimitivePBRInfo>();
+    multiPrimitivePBR2 = mkU<MultiPrimitiveMaterialInfo>();
+    triToMaterialIndex.clear();
     for (const tinygltf::Mesh& mesh : model.meshes) {
         for (const tinygltf::Primitive& prim : mesh.primitives) {
             LoadGLTFPrimitive(model, prim, true);
@@ -201,11 +204,24 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
 
     indexCount = indices.size();
     assert(indexCount == multiPrimitivePBR->triToMaterialIndex.size() * 3);
+    assert(indexCount == triToMaterialIndex.size() * 3);
+
+    vector<MaterialData> matData;
 
     // TODO: bad since it's duplicating textures, we need the material redirection layer (int3 buffer for 3 indices?)
     // Materials
     for (const tinygltf::Material& mat : model.materials) {
         const auto& pbr = mat.pbrMetallicRoughness;
+
+        //
+        matData.push_back(
+            MaterialData{
+                .albedoMult = pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data())),
+                .albedoTextureIndex = pbr.baseColorTexture.index,
+                .metallicRoughnessIndex = pbr.metallicRoughnessTexture.index,
+            }
+        );
+        //
 
         multiPrimitivePBR->baseColorMult = pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data()));
 
@@ -236,6 +252,15 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
             multiPrimitivePBR->aoTexs.push_back({});
             (--multiPrimitivePBR->aoTexs.end())->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
         }
+    }
+
+    multiPrimitivePBR2->primData = WBuffer();
+    multiPrimitivePBR2->primData.CreateDeviceLocalFromData(ref, matData.size() * sizeof(MaterialData), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer, matData.data());
+    multiPrimitivePBR2->triToPrim.CreateDeviceLocalFromData(ref, triToMaterialIndex.size() * sizeof(uint32_t), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer, triToMaterialIndex.data());
+    for (int i = 0; i < model.textures.size(); i++) {
+        const auto& img = model.images[model.textures[i].source];
+        multiPrimitivePBR2->textures.push_back({});
+        multiPrimitivePBR2->textures[multiPrimitivePBR2->textures.size() - 1].CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
     }
 
     // Uniform
@@ -280,10 +305,9 @@ void Mesh::CreateFromGLTFPrimitive(const VulkanReferences& ref, ShaderPipeline* 
 
     const auto& pbr = mat.pbrMetallicRoughness;
     singlePrimitivePBR = mkU<SinglePrimitivePBRInfo>();
-    singlePrimitivePBR->baseColorMult = vec4(1.0f);// pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data()));
 
     UPBRInfo pbrInfo = {
-        .albedoMult = singlePrimitivePBR->baseColorMult,
+        .albedoMult = pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data())),
         .hasAlbedoTex = false,
         .hasMetallicRoughnessTex = false,
         .hasAOTex = false
@@ -375,7 +399,10 @@ void Mesh::LoadGLTFPrimitive(const tinygltf::Model& model, const tinygltf::Primi
     GetGLTFIndices(model, prim, &primIndices);
     for (size_t i = 0; i < primIndices.size(); i++) {
         indices.push_back(primIndices[i] + indexOffset);
-        if (accountForMultiplePrimitives && i % 3 == 0) multiPrimitivePBR->triToMaterialIndex.push_back(prim.material);
+        if (accountForMultiplePrimitives && i % 3 == 0) {
+            multiPrimitivePBR->triToMaterialIndex.push_back(prim.material);
+            triToMaterialIndex.push_back(prim.material);
+        }
     }
 }
 

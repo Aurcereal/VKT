@@ -1,11 +1,14 @@
 #pragma once
 
 #include "defines.h"
-#include "scene/buffer.h"
-#include "scene/texture.h"
+// #include "scene/buffer.h"
+// #include "scene/texture.h"
 #include <vector>
 
 using namespace std;
+
+class WBuffer;
+class WTexture;
 
 namespace ShaderParameter {
 	enum class Type {

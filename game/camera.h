@@ -10,15 +10,15 @@ public:
 
 	mat4 GetProjectionMatrix();
 	mat4 GetViewMatrix();
-private:
-	void RotateAboutLocalX(float amt);
-	void RotateAboutGlobalY(float amt);
 
 	vec3 pos;
 	vec2 nearFar;
 	vec3 ri, up, fo;
 	float fovYRadians;
 	float aspect;
+private:
+	void RotateAboutLocalX(float amt);
+	void RotateAboutGlobalY(float amt);
 
 	float lookSens;
 	float moveSens;

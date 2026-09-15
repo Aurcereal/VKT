@@ -1,12 +1,13 @@
-slangc pbr-obj.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o pbr-obj.spv
-slangc solid-color.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o solid-color.spv
-slangc pbr-gltf-prim.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o pbr-gltf-prim.spv
-slangc vbd-shader.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o vbd-shader.spv
-slangc display-probe-depth-test.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o display-probe-depth-test.spv
-slangc test-compute.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry main -o test-compute.spv
-slangc depth-buffer-to-texture.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry main -o depth-buffer-to-texture.spv
-slangc spherical-harmonics-sky.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry main -o spherical-harmonics-sky.spv
-slangc spherical-harmonics-env-prog.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry main -o spherical-harmonics-env-prog.spv
-slangc spherical-harmonics-env-feedback.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry main -o spherical-harmonics-env-feedback.spv
-slangc skybox.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o skybox.spv
-slangc reflect.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o reflect.spv
+slangc material/pbr-obj.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o compiled/pbr-obj.spv
+slangc material/solid-color.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o compiled/solid-color.spv
+slangc material/pbr-gltf-prim.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o compiled/pbr-gltf-prim.spv
+slangc material/vbd-shader.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o compiled/vbd-shader.spv
+slangc material/display-probe-depth-test.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o compiled/display-probe-depth-test.spv
+slangc material/skybox.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o compiled/skybox.spv
+slangc material/reflect.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o compiled/reflect.spv
+slangc material/raytraced-view.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -entry fragMain -o compiled/raytraced-view.spv
+
+slangc compute/depth-buffer-to-texture.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry main -o compiled/depth-buffer-to-texture.spv
+slangc compute/spherical-harmonics-sky.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry main -o compiled/spherical-harmonics-sky.spv
+slangc compute/spherical-harmonics-env-prog.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry main -o compiled/spherical-harmonics-env-prog.spv
+slangc compute/spherical-harmonics-env-feedback.slang -I "module" -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry main -o compiled/spherical-harmonics-env-feedback.spv
