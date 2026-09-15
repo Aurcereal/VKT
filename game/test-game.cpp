@@ -5,7 +5,7 @@ void TestGame::Update(float time, float dt) {
 #if SCENE == 0
 	raytraceSceneTransform = glm::scale(mat4(1.0f), vec3(0.04f)) * glm::rotate(mat4(1.0f), glm::radians(0.0f), vec3(0, 1, 0)) * glm::rotate(mat4(1.0f), 0.0f, vec3(0.0f, 1.0f, 0.0f)) * glm::scale(mat4(1.0f), vec3(0.014f + 0.5));
 #elif SCENE == 1
-	raytraceSceneTransform = glm::rotate(mat4(1.0f), glm::radians(90.0f), vec3(1,0,0)) * glm::scale(mat4(1.0f), vec3(1.4f));
+	raytraceSceneTransform = glm::scale(mat4(1.0f), vec3(1.4f));
 #elif SCENE == 2
 	raytraceSceneTransform = glm::rotate(mat4(1.0f), glm::radians(90.0f), vec3(1.0f, 0.0f, 0.0f)) * glm::scale(mat4(1.0f), vec3(1.4f));
 #endif

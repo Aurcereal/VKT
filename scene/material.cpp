@@ -43,7 +43,7 @@ void Material::CreateDescriptorSet(const VulkanReferences& ref, const vector<Sha
     // Configure descriptor sets
     for (size_t i = 0; i < layouts.size(); i++) {
         vector<WDescriptorSet> ss;
-        ss.reserve(parameters.size()*40); // IMPORTANT since we have pointers to vectors, 12 since texture array gives multiple descriptors.. just use malloc like u did for one of them omg
+        ss.reserve(parameters.size()*40); // TODO: Make max descriptor count instead// IMPORTANT since we have pointers to vectors, 12 since texture array gives multiple descriptors.. just use malloc like u did for one of them omg
         vector<vk::WriteDescriptorSet> ssWriters;
         for (uint j = 0; j < parameters.size(); j++) {
             auto& param = parameters[j];

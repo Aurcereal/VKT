@@ -799,6 +799,7 @@ private:
 
             ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eFragment },
 
+            pc.GetSkyboxSH()->GetSParameter(vk::ShaderStageFlagBits::eFragment),
         };
         vector materialParams = {
             uRaytraceCameraInfo.GetMParameter(),
@@ -817,6 +818,8 @@ private:
             raytraceMesh.multiPrimitivePBR2->primData.GetMParameter(),
 
             ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray{.textures = &raytraceMesh.multiPrimitivePBR2->textures}),
+
+            pc.GetSkyboxSH()->GetMParameter(),
         };
 
         quadShader.Create(coreReferences, "shaders/compiled/raytraced-view.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams, false, true);
@@ -927,7 +930,7 @@ private:
 #elif SCENE == 1
         pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(),
             // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(20, 10, 20), vec3(0.4f, 4.0f, 0.5f), vec3(16.0f, 11.0f, 14.0f)); //x -8 to 8 y -2 to 12 z -8 to 15
+            uvec3(25, 25, 40), vec3(0.4f, 4.0f, 0.5f), vec3(16.0f, 11.0f, 14.0f)); //x -8 to 8 y -2 to 12 z -8 to 15
 #elif SCENE == 2
         pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(),
             // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
@@ -1110,7 +1113,7 @@ private:
                 .singleObjectSize = GetUniformAlignment<UEntity>(coreReferences)
             }),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
-            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->depthBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->depthBufferA}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
         };
         depthOrbShader.Create(coreReferences, "shaders/compiled/display-probe-depth-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), depthProbeShaderParams);
@@ -1279,7 +1282,7 @@ private:
         renderPass.EnqueueSetMaterial(solidColorMaterial, currFrameIndex, { 2 });
         renderPass.EnqueueDraw(cubeMesh);
 
-        DrawQuad(renderPass, currFrameIndex);
+        // DrawQuad(renderPass, currFrameIndex);
 #else
         renderPass.EnqueueSetMaterial(skyboxMaterial, currFrameIndex);
         renderPass.EnqueueDraw(cubeMesh);

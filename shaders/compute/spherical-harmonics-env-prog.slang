@@ -14,17 +14,21 @@ groupshared float4[64] sharedDepthSamples;
 [[vk::binding(4,0)]]StructuredBuffer<uint32_t> worldIndices;
 [[vk::binding(5,0)]]StructuredBuffer<uint32_t> triangleRedirection;
 [[vk::binding(6,0)]]StructuredBuffer<BVHNode> bvhNodes;
-[[vk::binding(7,0)]]StructuredBuffer<uint32_t> primToMaterialIndex;
 
-[[vk::binding(8, 0)]]Sampler2D albedoTexs[];
-[[vk::binding(9, 0)]]Sampler2D metalRoughnessTexs[];
-[[vk::binding(10, 0)]]Sampler2D AOTexs[];
-[[vk::binding(11, 0)]]ConstantBuffer<UPBRInfo> pbrInfo;
+[[vk::binding(7, 0)]] StructuredBuffer<uint32_t> triToPrimIndex;
+[[vk::binding(8, 0)]] StructuredBuffer<PrimitiveData> primData;
+[[vk::binding(9, 0)]]Sampler2D texs[];
 
-[[vk::binding(12,0)]]StructuredBuffer<float> skySh;
-[[vk::binding(13,0)]]RWStructuredBuffer<float> shCoefficients;
-[[vk::binding(14,0)]]RWStructuredBuffer<float> depthBuffer;
+[[vk::binding(10,0)]]StructuredBuffer<float> skySh;
+
+[[vk::binding(11, 0)]] StructuredBuffer<float> shCoefficientsSrc;
+[[vk::binding(12, 0)]] RWStructuredBuffer<float> shCoefficientsDst;
+[[vk::binding(13, 0)]] StructuredBuffer<float> depthBufferSrc;
+[[vk::binding(14, 0)]] RWStructuredBuffer<float> depthBufferDst;
+
 [[vk::binding(15,0)]]ConstantBuffer<UProbeVolumeLayout> probeLayout;
+
+[[vk::binding(16, 0)]] [[vk::image_format("r32f")]] Sampler2D<float> depthTextureSrc;
 
 struct PushConstants {
     uint32_t currGroup;
@@ -106,8 +110,9 @@ void main(uint3 id: SV_DispatchThreadID,
     bvh.triangleRedirection = triangleRedirection;
     bvh.nodes = bvhNodes;
 
-    float3 rd = uniformSphere(float2(rngi(2*threadIDWithinGroup + 525 + pushConstants.currGroup * 23 - pushConstants.currBake * 7), rngi(threadIDWithinGroup + 525 - pushConstants.currGroup * 15 + pushConstants.currBake * 9)));
-    float4 samp = SampleEnvironmentBVH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, albedoTexs, metalRoughnessTexs, AOTexs, primToMaterialIndex, pbrInfo, skySh, skybox, uBoxLight);
+    float3 rd = uniformSphere(float2(rngi(2 * threadIDWithinGroup + 525 + pushConstants.currGroup * 23 - pushConstants.currBake * 7), rngi(threadIDWithinGroup + 525 - pushConstants.currGroup * 15 + pushConstants.currBake * 9)));
+    // float4 samp = SampleEnvironmentBVH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, texs, triToPrimIndex, primData, skySh, skybox, uBoxLight);
+    float4 samp = SampleEnvironmentBVHEnvSH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, texs, triToPrimIndex, primData, shCoefficientsSrc, depthTextureSrc, probeLayout, skybox, uBoxLight, probeToBake);
     float3 li = samp.xyz;
     float depth = samp.w;
 
@@ -146,11 +151,11 @@ void main(uint3 id: SV_DispatchThreadID,
     if (threadIDWithinGroup == 0) {
 
         // Blending
-        float srcWeight = shCoefficients[probeToBake * 28 + 27];
+        float srcWeight = shCoefficientsDst[probeToBake * 28 + 27];
         float dstWeight = 1.0; // todo: slow history changing and temporal stuff for realtime updating?
         float totalWeight = srcWeight + dstWeight;
         float srcBlend = srcWeight / totalWeight; float dstBlend = dstWeight / totalWeight;
-        shCoefficients[probeToBake * 28 + 27] = totalWeight;
+        shCoefficientsDst[probeToBake * 28 + 27] = totalWeight;
         
         //
         for (int basis = 0; basis < 9; basis++) {
@@ -162,13 +167,13 @@ void main(uint3 id: SV_DispatchThreadID,
 
             if (srcBlend <= 0.00001) {
                 // Don't even sample the buffer if it's trash
-                shCoefficients[probeToBake * 28 + basis * 3 + 0] = sum.x;
-                shCoefficients[probeToBake * 28 + basis * 3 + 1] = sum.y;
-                shCoefficients[probeToBake * 28 + basis * 3 + 2] = sum.z;
+                shCoefficientsDst[probeToBake * 28 + basis * 3 + 0] = sum.x;
+                shCoefficientsDst[probeToBake * 28 + basis * 3 + 1] = sum.y;
+                shCoefficientsDst[probeToBake * 28 + basis * 3 + 2] = sum.z;
             } else {
-                shCoefficients[probeToBake * 28 + basis * 3 + 0] = shCoefficients[probeToBake * 28 + basis * 3 + 0] * srcBlend + sum.x * dstBlend;
-                shCoefficients[probeToBake * 28 + basis * 3 + 1] = shCoefficients[probeToBake * 28 + basis * 3 + 1] * srcBlend + sum.y * dstBlend;
-                shCoefficients[probeToBake * 28 + basis * 3 + 2] = shCoefficients[probeToBake * 28 + basis * 3 + 2] * srcBlend + sum.z * dstBlend;
+                shCoefficientsDst[probeToBake * 28 + basis * 3 + 0] = shCoefficientsDst[probeToBake * 28 + basis * 3 + 0] * srcBlend + sum.x * dstBlend;
+                shCoefficientsDst[probeToBake * 28 + basis * 3 + 1] = shCoefficientsDst[probeToBake * 28 + basis * 3 + 1] * srcBlend + sum.y * dstBlend;
+                shCoefficientsDst[probeToBake * 28 + basis * 3 + 2] = shCoefficientsDst[probeToBake * 28 + basis * 3 + 2] * srcBlend + sum.z * dstBlend;
             }
             
         }
@@ -176,7 +181,7 @@ void main(uint3 id: SV_DispatchThreadID,
         // Do depth
         for (int thread = 0; thread < 64; thread++) {
             float4 depthSample = sharedDepthSamples[thread];
-            float3 rd = depthSample.xyz; float depth = min(4., depthSample.w); // TODO: temp fix for massive depth inflating nearby texels
+            float3 rd = depthSample.xyz; float depth = min(1., depthSample.w); // TODO: temp fix for massive depth inflating nearby texels
             int2 texel = int2(16)+int2(DirectionToTexel(rd));
 
             // Splat 5x5
@@ -192,9 +197,9 @@ void main(uint3 id: SV_DispatchThreadID,
                     float weight = pow(max(0., dot(rd, TexelToDirection(currTexel))), 32.);
 
                     uint ind = TexelToBufferIndices(probeToBake, currTexel);
-                    depthBuffer[ind + 0] += depth * weight;
-                    depthBuffer[ind + 1] += depth * depth * weight;
-                    depthBuffer[ind + 2] += weight;
+                    depthBufferDst[ind + 0] += depth * weight;
+                    depthBufferDst[ind + 1] += depth * depth * weight;
+                    depthBufferDst[ind + 2] += weight;
                 }
             }
         }

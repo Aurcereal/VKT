@@ -11,6 +11,7 @@ public:
 	void* MapMemory();
 	void UnmapMemory();
 	void CopyFrom(const VulkanReferences& ref, const WBuffer& src, vk::DeviceSize size = 0, vk::DeviceSize dstOffset = 0);
+	void Fill(const VulkanReferences& ref, uint32_t data, vk::DeviceSize size = 0, vk::DeviceSize offset = 0);
 	void EnqueueCopyFrom(vk::raii::CommandBuffer*, const VulkanReferences& ref, const WBuffer& src, vk::DeviceSize size = 0);
 	void SetData(const VulkanReferences&, void* data, vk::DeviceSize, vk::DeviceSize dstOffset = 0);
 

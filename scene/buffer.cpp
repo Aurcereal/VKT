@@ -90,3 +90,12 @@ void WBuffer::CopyFrom(const VulkanReferences& ref, const WBuffer& src, vk::Devi
     cmd.copyBuffer(src.buffer, buffer, vk::BufferCopy(0, dstOffset, size)); // From where to where
     SubmitOneTimeCommands(ref, &cmd);
 }
+
+void WBuffer::Fill(const VulkanReferences& ref, uint32_t data, vk::DeviceSize size, vk::DeviceSize offset) {
+    if (size == 0) {
+        size = bufferSize;
+    }
+    auto cmd = BeginOneTimeCommands(ref);
+    cmd.fillBuffer(buffer, offset, size, data);
+    SubmitOneTimeCommands(ref, &cmd);
+}

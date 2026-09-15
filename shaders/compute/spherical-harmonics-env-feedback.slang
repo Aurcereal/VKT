@@ -14,19 +14,17 @@ groupshared float4[64] sharedDepthSamples;
 [[vk::binding(4,0)]]StructuredBuffer<uint32_t> worldIndices;
 [[vk::binding(5,0)]]StructuredBuffer<uint32_t> triangleRedirection;
 [[vk::binding(6,0)]]StructuredBuffer<BVHNode> bvhNodes;
-[[vk::binding(7,0)]]StructuredBuffer<uint32_t> primToMaterialIndex;
 
-[[vk::binding(8, 0)]]Sampler2D albedoTexs[];
-[[vk::binding(9, 0)]]Sampler2D metalRoughnessTexs[];
-[[vk::binding(10, 0)]]Sampler2D AOTexs[];
-[[vk::binding(11, 0)]]ConstantBuffer<UPBRInfo> pbrInfo;
+[[vk::binding(7, 0)]] StructuredBuffer<uint32_t> triToPrimIndex;
+[[vk::binding(8, 0)]] StructuredBuffer<PrimitiveData> primData;
+[[vk::binding(9, 0)]] Sampler2D texs[];
 
-[[vk::binding(12, 0)]]StructuredBuffer<float> prevShCoefficients;
-[[vk::binding(13, 0)]] [[vk::image_format("r32f")]] Sampler2D<float> prevDepthTexture;
+[[vk::binding(10, 0)]]StructuredBuffer<float> prevShCoefficients;
+[[vk::binding(11, 0)]] [[vk::image_format("r32f")]] Sampler2D<float> prevDepthTexture;
 
-[[vk::binding(14,0)]]RWStructuredBuffer<float> shCoefficients;
-[[vk::binding(15,0)]]RWStructuredBuffer<float> depthBuffer; // right now isn't written to
-[[vk::binding(16,0)]]ConstantBuffer<UProbeVolumeLayout> probeLayout;
+[[vk::binding(12,0)]]RWStructuredBuffer<float> shCoefficients;
+[[vk::binding(13,0)]]RWStructuredBuffer<float> depthBuffer; // right now isn't written to
+[[vk::binding(14,0)]]ConstantBuffer<UProbeVolumeLayout> probeLayout;
 
 struct PushConstants {
     uint32_t currGroup;
@@ -108,7 +106,7 @@ void main(uint3 id: SV_DispatchThreadID,
     bvh.nodes = bvhNodes;
 
     float3 rd = uniformSphere(float2(rngi(id.x - id.y + 525 + pushConstants.currGroup * 23 - pushConstants.currBake * 7), rngi(id.x + id.y + 525 - pushConstants.currGroup * 15 + pushConstants.currBake * 9)));
-    float4 samp = SampleEnvironmentBVHEnvSH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, albedoTexs, metalRoughnessTexs, AOTexs, primToMaterialIndex, pbrInfo, prevShCoefficients, prevDepthTexture, probeLayout, skybox, uBoxLight, probeToBake);
+    float4 samp = SampleEnvironmentBVHEnvSH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, texs, triToPrimIndex, primData, prevShCoefficients, prevDepthTexture, probeLayout, skybox, uBoxLight, probeToBake);
     float3 li = samp.xyz;
     float depth = samp.w;
 

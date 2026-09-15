@@ -103,24 +103,28 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 	BakeAndSetSkyboxProbe();
 
 	// Create Empty Probe Position UBO
-	probePositionUBO.push_back(WBuffer());
+	/*probePositionUBO.push_back(WBuffer());
 	probePositionUBO[0].Create(*ref, ceilToNearest(sizeof(UProbePosition), 16), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-	probePositionUBO[0].MapMemory();
+	probePositionUBO[0].MapMemory();*/
 
 	// Make Probe Volume
 	probeVolume = mkU<ProbeVolume>();
 
 	// Make Buffers
 	vk::DeviceSize probeCount = probeCounts.x * probeCounts.y * probeCounts.z;
-	vk::DeviceSize envShSize = sizeof(float) * 28;
+	vk::DeviceSize envShSizeByte = sizeof(float) * 28;
+	vk::DeviceSize depthBufferCount = probeCount * 16 * 16 * 3;
 
-	vector<float> envZeroData(probeCount * (envShSize / sizeof(float)), 0.0f);
-	probeVolume->shCoefficientsA.CreateDeviceLocalFromData(*ref, probeCount * envShSize,
+	vector<float> envZeroData(probeCount * (envShSizeByte / sizeof(float)), 0.0f);
+	vector<float> depthZeroData(depthBufferCount, 0.0f);
+	probeVolume->shCoefficientsA.CreateDeviceLocalFromData(*ref, probeCount * envShSizeByte,
 		vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc, envZeroData.data());
-	probeVolume->shCoefficientsB.CreateDeviceLocalFromData(*ref, probeCount * envShSize,
+	probeVolume->shCoefficientsB.CreateDeviceLocalFromData(*ref, probeCount * envShSizeByte,
 		vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, envZeroData.data());
-	probeVolume->depthBuffer.Create(*ref, sizeof(float) * probeCount * 16 * 16 * 3,
-		vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+	probeVolume->depthBufferA.CreateDeviceLocalFromData(*ref, sizeof(float) * depthBufferCount,
+		vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, depthZeroData.data());
+	probeVolume->depthBufferB.CreateDeviceLocalFromData(*ref, sizeof(float) * depthBufferCount,
+		vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, depthZeroData.data());
 
 	// Transform
 	mat4 transform = glm::translate(mat4(1.0), boundingBoxOrigin) * glm::scale(mat4(1.0), boundingBoxSize) * glm::translate(mat4(1.0), vec3(-0.5));
@@ -157,15 +161,20 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
+
+		raytraceMesh->multiPrimitivePBR2->triToPrim.GetSParameter(vk::ShaderStageFlagBits::eCompute),
+		raytraceMesh->multiPrimitivePBR2->primData.GetSParameter(vk::ShaderStageFlagBits::eCompute),
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eCompute },
+
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eCompute },
+
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
+
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
+		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
 	};
 	vector envMatParams = {
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uRaytracedSceneBuffer}),
@@ -175,15 +184,21 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->indexBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->triangleRedirectionBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->nodeBuffer}),
-		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->multiPrimitivePBR->triToMaterialIndexBuffer}),
-		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray {.textures = &raytraceMesh->multiPrimitivePBR->baseColorTexs}),
-		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray {.textures = &raytraceMesh->multiPrimitivePBR->metallicRoughnessTexs}),
-		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray {.textures = &raytraceMesh->multiPrimitivePBR->aoTexs}),
-		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &raytraceMesh->multiPrimitivePBR->uPbrInfo}),
+
+		raytraceMesh->multiPrimitivePBR2->triToPrim.GetMParameter(),
+		raytraceMesh->multiPrimitivePBR2->primData.GetMParameter(),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray{.textures = &raytraceMesh->multiPrimitivePBR2->textures}),
+
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = skyboxSh.get() }),
-		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->shCoefficientsA}),
-		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->depthBuffer}),
+
+		ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer {.bufferA = &probeVolume->shCoefficientsB, .bufferB = &probeVolume->shCoefficientsA }),
+		ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer {.bufferA = &probeVolume->shCoefficientsA, .bufferB = &probeVolume->shCoefficientsB }),
+		ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer{.bufferA = &probeVolume->depthBufferB, .bufferB = &probeVolume->depthBufferA}),
+		ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer{.bufferA = &probeVolume->depthBufferA, .bufferB = &probeVolume->depthBufferB}),
+
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &probeVolume->probeLayoutUBO}),
+
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{.texture = &probeVolume->octahedralDepthMap}),
 	};
 	bakeEnvironmentProbe.Create(*ref, "shaders/compiled/spherical-harmonics-env-prog.spv", envShaParams, envMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PBakePassInfo));
 
@@ -196,11 +211,11 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
+
+		raytraceMesh->multiPrimitivePBR2->triToPrim.GetSParameter(vk::ShaderStageFlagBits::eCompute),
+		raytraceMesh->multiPrimitivePBR2->primData.GetSParameter(vk::ShaderStageFlagBits::eCompute),
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER_ARRAY, .visibility = vk::ShaderStageFlagBits::eCompute },
-		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
+
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eCompute },
@@ -215,16 +230,16 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->indexBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->triangleRedirectionBuffer}),
 		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->nodeBuffer}),
-		ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh->multiPrimitivePBR->triToMaterialIndexBuffer}),
-		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray {.textures = &raytraceMesh->multiPrimitivePBR->baseColorTexs}),
-		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray {.textures = &raytraceMesh->multiPrimitivePBR->metallicRoughnessTexs}),
-		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray {.textures = &raytraceMesh->multiPrimitivePBR->aoTexs}),
-		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &raytraceMesh->multiPrimitivePBR->uPbrInfo}),
+
+		raytraceMesh->multiPrimitivePBR2->triToPrim.GetMParameter(),
+		raytraceMesh->multiPrimitivePBR2->primData.GetMParameter(),
+		ShaderParameter::MParameter(ShaderParameter::UCombinedSamplerArray{.textures = &raytraceMesh->multiPrimitivePBR2->textures}),
+
 		ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer {.bufferA = &probeVolume->shCoefficientsA, .bufferB = &probeVolume->shCoefficientsB }),
 		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{.texture = &probeVolume->octahedralDepthMap}),
 
 		ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer {.bufferA = &probeVolume->shCoefficientsB, .bufferB = &probeVolume->shCoefficientsA }),
-		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->depthBuffer}),
+		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->depthBufferA}),
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &probeVolume->probeLayoutUBO}),
 	};
 	feedbackBakeEnvironmentProbe.Create(*ref, "shaders/compiled/spherical-harmonics-env-feedback.spv", feedbackEnvShaParams, feedbackEnvMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PBakePassInfo));
@@ -236,14 +251,18 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
 	};
 	vector depthTexCreatorMParams = {
-		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->depthBuffer}),
+		ShaderParameter::MParameter(ShaderParameter::UBuffer{.buffer = &probeVolume->depthBufferA}),
 		ShaderParameter::MParameter(ShaderParameter::UStorageTexture{.texture = &probeVolume->octahedralDepthMap}),
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &probeVolume->probeLayoutUBO}),
 	};
 	convertDepthBufferToTexture.Create(*ref, "shaders/compiled/depth-buffer-to-texture.spv", depthTexCreatorSParams, depthTexCreatorMParams, uvec3(16, 16, 1));
 
 	// Bake
-	BakeEnvironmentProbes(probeCounts, transform);
+	BakeEnvironmentProbes(512, probeCounts, transform);
+	BakeEnvironmentProbes(1024, probeCounts, transform);
+	BakeEnvironmentProbes(1024, probeCounts, transform);
+	BakeEnvironmentProbes(1024, probeCounts, transform);
+	BakeEnvironmentProbes(4096, probeCounts, transform);
 
 	// Setup feedback
 	// SetupFeedbackBake();
@@ -280,12 +299,13 @@ void ProbeCreator::ZeroOutScratchBuffer() {
 	shScratchBuffer.CopyFrom(*ref, zeroBuffer, SCRATCH_BUFFER_SIZE);
 }
 
-void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform) {
+bool pingPongSelectNoBlend = false;
+void ProbeCreator::BakeEnvironmentProbes(uint32_t bakeCount, glm::uvec3 probeCounts, mat4 transform) {
 	assert(isSkyboxBaked);
 
 	// Bake all probes
 	uint32_t probeCount = probeCounts.x * probeCounts.y * probeCounts.z;
-	uint32_t bakeCount = 400; // TODO: need even more maybe or sh improvement
+	// uint32_t bakeCount = 1024; // TODO: need even more maybe or sh improvement
 	uint32_t groupCount = ceilDiv(probeCount, GROUP_SIZE);
 	std::cout << "Probe Count: " << probeCount << " Group Count: " << groupCount << std::endl;
 
@@ -297,7 +317,7 @@ void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform)
 		for (int g = 0; g < groupCount; g++) {
 			bakePassInfo.currGroup = g;
 			bakeEnvironmentProbe.EnqueuePushConstants(&computeDispatcher.cmd, &bakePassInfo);
-			bakeEnvironmentProbe.EnqueueDispatch(&computeDispatcher, uvec3(SQRT_THREADS_PER_PASS, SQRT_THREADS_PER_PASS, 1));
+			bakeEnvironmentProbe.EnqueueDispatch(&computeDispatcher, uvec3(SQRT_THREADS_PER_PASS, SQRT_THREADS_PER_PASS, 1), pingPongSelectNoBlend);
 		}
 		bakeEnvironmentProbe.EnqueueComputeBarrier(&computeDispatcher, 
 			vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eShaderRead, 
@@ -309,13 +329,16 @@ void ProbeCreator::BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform)
 			computeDispatcher.StartRecord(*ref); // TODO: del
 		}
 	}
-
+	
 	// Depth Buffer -> Texture
 	probeVolume->octahedralDepthMap.TransitionImageLayoutHardcodedEnqueue(&computeDispatcher.cmd, *ref, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
 	convertDepthBufferToTexture.EnqueueDispatch(&computeDispatcher, uvec3(18 * probeCounts.x * probeCounts.y, 18 * probeCounts.z, 1));
 	probeVolume->octahedralDepthMap.TransitionImageLayoutHardcodedEnqueue(&computeDispatcher.cmd, *ref, vk::ImageLayout::eGeneral, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 	computeDispatcher.FinishRecordSubmit(*ref, true);
+
+	(pingPongSelectNoBlend ? probeVolume->shCoefficientsA : probeVolume->shCoefficientsB).Fill(*ref, 0);
+	pingPongSelectNoBlend = !pingPongSelectNoBlend;
 }
 
 void ProbeCreator::SetupFeedbackBake() {

@@ -24,7 +24,8 @@ struct ProbeVolume {
 	glm::mat4 invTransform; // to (0, 1)
 	vector<WBuffer> probeLayoutUBO;
 	WTexture octahedralDepthMap;
-	WBuffer depthBuffer;
+	WBuffer depthBufferA;
+	WBuffer depthBufferB;
 
 	vector<WBuffer> probeEntityUBO;
 
@@ -43,7 +44,7 @@ public:
 	inline bool GetPingPongSelect() { return pingPongSelect; }
 	void ContinueFeedbackBake();
 private:
-	void BakeEnvironmentProbes(glm::uvec3 probeCounts, mat4 transform);
+	void BakeEnvironmentProbes(uint32_t bakeCount, glm::uvec3 probeCounts, mat4 transform);
 	
 	void SetupFeedbackBake();
 
@@ -70,7 +71,7 @@ private:
 
 	bool pingPongSelect = false;
 
-	vector<WBuffer> probePositionUBO; // shouldn't have to do vector..
+	 // vector<WBuffer> probePositionUBO; // shouldn't have to do vector..
 };
 
 // need to change spherical harmonic shader (how to flatten group id & thread id) as well as sampling shader (how much to divide sh sample, or just do it when cpu accuming) if you change this

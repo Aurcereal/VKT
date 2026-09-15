@@ -39,6 +39,8 @@ StructuredBuffer<PrimitiveData> primData;
 
 Sampler2D texs[];
 
+StructuredBuffer<float> skySh;
+
 [shader("vertex")]
 VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
     VSOutput vOut;
@@ -69,10 +71,19 @@ float4 fragMain(VSOutput o) : SV_Target
     float3 ro = uCamera.position.xyz;
     float3 rd = Raycast(o.uv);
 
+    #if 0
     return float4(SampleEnvironmentBVHAlbedo(
         ro, rd, 
         uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), 
         bvh, 
         texs, triToPrimIndex, primData, 
         skybox, uBoxLight).rgb, 1.);
+#else
+    return float4(SampleEnvironmentBVH(
+               ro, rd,
+               uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel),
+               bvh,
+               texs, triToPrimIndex, primData,
+               skySh, skybox, uBoxLight) .rgb, 1.);
+    #endif
 }

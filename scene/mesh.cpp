@@ -208,7 +208,7 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
 
     vector<MaterialData> matData;
 
-    // TODO: bad since it's duplicating textures, we need the material redirection layer (int3 buffer for 3 indices?)
+    // TODO: delete multiprimitivepbr the old system and make 2 the new 1
     // Materials
     for (const tinygltf::Material& mat : model.materials) {
         const auto& pbr = mat.pbrMetallicRoughness;
