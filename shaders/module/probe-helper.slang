@@ -9,6 +9,7 @@ public struct UProbeVolumeLayout {
     public float4x4 invTransform;
     public float4x4 transform;
     public uint3 probeCounts;
+    public float maxDepth;
 };
 
 public uint get1DProbeID(uint3 probeCounts, uint3 id) {

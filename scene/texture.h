@@ -33,6 +33,7 @@ public:
         vk::MemoryPropertyFlags properties, vk::ImageAspectFlags imageViewAspectFlags = vk::ImageAspectFlagBits::eColor,
         uint32_t arrayLayerCount = 1, bool cubeMap = false);
 
+    void Fill(const VulkanReferences& ref, uint32_t data);
     void CopyFromBuffer(const VulkanReferences& ref, const WBuffer& buffer, vk::DeviceSize bufferOffset = 0, uint32_t arrayLayer = 0);
 
     static void TransitionImageLayout(

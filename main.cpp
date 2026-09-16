@@ -776,9 +776,11 @@ private:
 
         vector<uint32_t> indices = { 0, 1, 3, 0, 3, 2 };
 
+        quadMesh = {};
         quadMesh.CreateFromArrays(coreReferences, positions, colors, normals, indices);
 
         // Setup Uniform
+        uRaytraceCameraInfo = {};
         uRaytraceCameraInfo.Create(coreReferences, sizeof(RaytraceCameraInfo), true);
 
         // Setup Shader & Material
@@ -822,6 +824,7 @@ private:
             pc.GetSkyboxSH()->GetMParameter(),
         };
 
+        quadShader = {}; quadMaterial = {};
         quadShader.Create(coreReferences, "shaders/compiled/raytraced-view.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams, false, true);
         quadMaterial.Create(&quadShader, coreReferences, materialParams);
     }
@@ -831,116 +834,7 @@ private:
         renderPass.EnqueueDraw(quadMesh);
     }
 
-    ProbeCreator pc;
-    BVHManager bvhManager;
-    uPtr<BVHGPU> bvh;
-    // Mesh sponzaRaytraceMesh;
-    Mesh raytraceMesh;
-    void InitVulkan() {
-        CreateInstance();
-        SetupDebugMessenger();
-        CreateSurface();
-        PickPhysicalDevice();
-        CreateLogicalDevice();
-
-        CreateSwapchain();
-        CreateImageViews();
-
-        CreateCommandPool();
-        CreateCommandBuffers();
-
-        CreateSyncObjects();
-        game.Update(0, 1e-2f);
-        CreateUniformBuffers();
-
-        CreateDepthResources();
-        CreateDescriptorPool();
-
-        CreateRenderPassesAndTargets();
-
-        GUIManager::Initialize(
-            window, *instance,
-            *coreReferences.physicalDevice, *coreReferences.device,
-            graphicsAndComputeIndex, *coreReferences.graphicsQueue,
-            *coreReferences.descriptorPool, MAX_FRAMES_IN_FLIGHT,
-            static_cast<VkFormat>(swapSurfaceFormat.format), static_cast<VkFormat>(GetDepthFormat())
-        );
-
-
-
-
-
-
-        // Meshes
-        blobMesh.CreateFromOBJFile(coreReferences, "models/blob.obj", true);
-        sphereMesh.CreateFromOBJFile(coreReferences, "models/smoothSphere.obj", true);
-        chairMesh.CreateFromOBJFile(coreReferences, "models/morrisChair.obj", true);
-        cubeMesh.CreateFromOBJFile(coreReferences, "models/cube.obj");
-        testRoom.CreateFromOBJFile(coreReferences, "models/testRoom.obj", true);
-#if SCENE == 0
-        raytraceMesh.CreateFromGLTFFile(coreReferences, "models/Sponza.glb", true);
-#elif SCENE == 1
-        raytraceMesh.CreateFromGLTFFile(coreReferences, "models/anotherBedroom.glb", true);
-#elif SCENE == 2
-        raytraceMesh.CreateFromOBJFile(coreReferences, "models/testRoom.obj", true);
-#endif
-        std::cout << "Raytrace Room Tri Count: " << raytraceMesh.indexCount/3 << std::endl;
-        
-        // Textures
-        whiteTexture.CreateFromFile(coreReferences, "textures/white.png", vk::Format::eR8G8B8A8Srgb);
-        testTexture.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png", vk::Format::eR8G8B8A8Srgb);
-        metallic.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_Metallic.tga.png", vk::Format::eR8G8B8A8Srgb);
-        roughness.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_Roughness.tga.png", vk::Format::eR8G8B8A8Srgb);
-        ao.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png", vk::Format::eR8G8B8A8Srgb);
-        testCubeMap.CreateCubeMapFromFiles(coreReferences, {
-            "textures/envmaps/storforsen/posx.jpg",
-            "textures/envmaps/storforsen/negx.jpg",
-            "textures/envmaps/storforsen/posy.jpg",
-            "textures/envmaps/storforsen/negy.jpg",
-            "textures/envmaps/storforsen/posz.jpg",
-            "textures/envmaps/storforsen/negz.jpg"
-            }, vk::Format::eR8G8B8A8Srgb);
-        testRoomTexture.CreateFromFile(coreReferences, "textures/testGiPicture.png", vk::Format::eR8G8B8A8Srgb);
-
-        // Skybox
-        vector skyboxShaderParams = {
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
-            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
-        };
-        vector skyboxMaterialParams = {
-            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
-            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
-        };
-        skyboxShader.Create(coreReferences, "shaders/compiled/skybox.spv", &swapSurfaceFormat.format, GetDepthFormat(), skyboxShaderParams, false, true);
-        skyboxMaterial.Create(&skyboxShader, coreReferences, skyboxMaterialParams);
-
-#ifndef VBD
-        // UI
-        GUIManager::RegisterUIFunction(std::bind(&Application::DebugUI, this));
-        GUIManager::RegisterUIFunction(std::bind(&TestGame::DrawUI, &game));
-
-        // Build BVH
-        bvh = bvhManager.BuildBVH(coreReferences, raytraceMesh);
-
-        // Bake Probes
-        UpdateUniformBuffers(0);
-        auto beforeProbeCreateTime = std::chrono::high_resolution_clock::now();
-#if SCENE == 0
-        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(), uvec3(20, 15, 20), vec3(0, 9.5f, 0), vec3(16.5 * 1.5f, 10 * 2.0f, 16.5 * 1.5f));
-#elif SCENE == 1
-        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(),
-            // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(25, 25, 40), vec3(0.4f, 4.0f, 0.5f), vec3(16.0f, 11.0f, 14.0f)); //x -8 to 8 y -2 to 12 z -8 to 15
-#elif SCENE == 2
-        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(),
-            // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
-            uvec3(15, 5, 10), vec3(0, 5, 4), vec3(18.0f, 15.0f, 25.0f)); //x -8 to 8 y -2 to 12 z -8 to 15
-#endif
-        auto afterProbeCreateTime = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(afterProbeCreateTime - beforeProbeCreateTime);
-
-        std::cout << "Probe Creation Time: " << static_cast<float>(duration.count()) * 1e-6 << std::endl;
-
+    void CreateObjectShaders() {
         // Objects
         vector shaderParams = {
             ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
@@ -976,7 +870,9 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
+        shaderPipeline = {};
         shaderPipeline.Create(coreReferences, "shaders/compiled/pbr-obj.spv", &swapSurfaceFormat.format, GetDepthFormat(), shaderParams, true, false);
+        testMaterial = {};
         testMaterial.Create(&shaderPipeline, coreReferences, materialParams);
 
         vector gltfPrimSParams = {
@@ -1018,6 +914,7 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
+        gltfPrimPBRShader = {};
         gltfPrimPBRShader.Create(coreReferences, "shaders/compiled/pbr-gltf-prim.spv", &swapSurfaceFormat.format, GetDepthFormat(), gltfPrimSParams, true, false);
 #if SCENE == 0
         breakfastRoomPrims = Mesh::CreatePrimitiveMeshesFromGLTFFile(coreReferences, "models/Sponza.glb", &gltfPrimPBRShader, gltfPrimAbstractMParams, 2, false);
@@ -1063,6 +960,8 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH() })
         };
+        reflectShader = {};
+        reflectMaterial = {};
         reflectShader.Create(coreReferences, "shaders/compiled/reflect.spv", &swapSurfaceFormat.format, GetDepthFormat(), reflectShaderParams);
         reflectMaterial.Create(&reflectShader, coreReferences, reflectMaterialParams);
 
@@ -1083,11 +982,12 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &metallic}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &ao}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
-		    ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer {.bufferA = &pc.probeVolume->shCoefficientsA, .bufferB = &pc.probeVolume->shCoefficientsB }),
+            ShaderParameter::MParameter(ShaderParameter::UPingPongBuffer {.bufferA = &pc.probeVolume->shCoefficientsA, .bufferB = &pc.probeVolume->shCoefficientsB }),
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
         };
+        blobMaterial = {};
         blobMaterial.Create(&shaderPipeline, coreReferences, blobMaterialParams);
 
         // Lighting probe material
@@ -1096,6 +996,7 @@ private:
                 .buffers = pc.probeVolume->CreateEntityListUBO(coreReferences),
                 .singleObjectSize = GetUniformAlignment<UEntity>(coreReferences)
             });
+        probeOrbMaterial = {};
         probeOrbMaterial.Create(&shaderPipeline, coreReferences, probeMaterialParams);
 
         // Depth probe material
@@ -1116,6 +1017,8 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &pc.probeVolume->depthBufferA}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
         };
+        depthOrbShader = {};
+        depthOrbMaterial = {};
         depthOrbShader.Create(coreReferences, "shaders/compiled/display-probe-depth-test.spv", &swapSurfaceFormat.format, GetDepthFormat(), depthProbeShaderParams);
         depthOrbMaterial.Create(&depthOrbShader, coreReferences, depthProbeMaterialParams);
 
@@ -1137,8 +1040,115 @@ private:
                 )
             }),
         };
+        solidColorShader = {};
+        solidColorMaterial = {};
         solidColorShader.Create(coreReferences, "shaders/compiled/solid-color.spv", &swapSurfaceFormat.format, GetDepthFormat(), solidColorSParams, true, false, true, sizeof(vec4));
         solidColorMaterial.Create(&solidColorShader, coreReferences, solidColorMParams);
+
+        SetupQuad();
+    }
+
+    ProbeCreator pc;
+    BVHManager bvhManager;
+    uPtr<BVHGPU> bvh;
+    // Mesh sponzaRaytraceMesh;
+    Mesh raytraceMesh;
+    void InitVulkan() {
+        CreateInstance();
+        SetupDebugMessenger();
+        CreateSurface();
+        PickPhysicalDevice();
+        CreateLogicalDevice();
+
+        CreateSwapchain();
+        CreateImageViews();
+
+        CreateCommandPool();
+        CreateCommandBuffers();
+
+        CreateSyncObjects();
+        game.Update(0, 1e-2f);
+        CreateUniformBuffers();
+
+        CreateDepthResources();
+        CreateDescriptorPool();
+
+        CreateRenderPassesAndTargets();
+
+        GUIManager::Initialize(
+            window, *instance,
+            *coreReferences.physicalDevice, *coreReferences.device,
+            graphicsAndComputeIndex, *coreReferences.graphicsQueue,
+            *coreReferences.descriptorPool, MAX_FRAMES_IN_FLIGHT,
+            static_cast<VkFormat>(swapSurfaceFormat.format), static_cast<VkFormat>(GetDepthFormat())
+        );
+
+        // Meshes
+        blobMesh.CreateFromOBJFile(coreReferences, "models/blob.obj", true);
+        sphereMesh.CreateFromOBJFile(coreReferences, "models/smoothSphere.obj", true);
+        chairMesh.CreateFromOBJFile(coreReferences, "models/morrisChair.obj", true);
+        cubeMesh.CreateFromOBJFile(coreReferences, "models/cube.obj");
+        testRoom.CreateFromOBJFile(coreReferences, "models/testRoom.obj", true);
+#if SCENE == 0
+        raytraceMesh.CreateFromGLTFFile(coreReferences, "models/Sponza.glb", true);
+#elif SCENE == 1
+        raytraceMesh.CreateFromGLTFFile(coreReferences, "models/anotherBedroom.glb", true);
+#elif SCENE == 2
+        raytraceMesh.CreateFromOBJFile(coreReferences, "models/testRoom.obj", true);
+#endif
+        std::cout << "Raytrace Room Tri Count: " << raytraceMesh.indexCount/3 << std::endl;
+        
+        // Textures
+        whiteTexture.CreateFromFile(coreReferences, "textures/white.png", vk::Format::eR8G8B8A8Srgb);
+        // testTexture.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png", vk::Format::eR8G8B8A8Srgb);
+        metallic.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_Metallic.tga.png", vk::Format::eR8G8B8A8Srgb);
+        roughness.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_Roughness.tga.png", vk::Format::eR8G8B8A8Srgb);
+        ao.CreateFromFile(coreReferences, "textures/chair/morrisChair_bigChairMat_BaseColor.tga.png", vk::Format::eR8G8B8A8Srgb);
+        testCubeMap.CreateCubeMapFromFiles(coreReferences, {
+            "textures/envmaps/storforsen/posx.jpg",
+            "textures/envmaps/storforsen/negx.jpg",
+            "textures/envmaps/storforsen/posy.jpg",
+            "textures/envmaps/storforsen/negy.jpg",
+            "textures/envmaps/storforsen/posz.jpg",
+            "textures/envmaps/storforsen/negz.jpg"
+            }, vk::Format::eR8G8B8A8Srgb);
+        testRoomTexture.CreateFromFile(coreReferences, "textures/testGiPicture.png", vk::Format::eR8G8B8A8Srgb);
+
+        // Skybox
+        vector skyboxShaderParams = {
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eAllGraphics },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
+        };
+        vector skyboxMaterialParams = {
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
+            ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &testCubeMap}),
+        };
+        skyboxShader.Create(coreReferences, "shaders/compiled/skybox.spv", &swapSurfaceFormat.format, GetDepthFormat(), skyboxShaderParams, false, true);
+        skyboxMaterial.Create(&skyboxShader, coreReferences, skyboxMaterialParams);
+
+#ifndef VBD
+        // UI
+        GUIManager::RegisterUIFunction(std::bind(&Application::DebugUI, this));
+        GUIManager::RegisterUIFunction(std::bind(&TestGame::DrawUI, &game));
+        GUIManager::RegisterUIFunction(std::bind(&ProbeCreator::DrawUI, &pc));
+
+        // Build BVH
+        bvh = bvhManager.BuildBVH(coreReferences, raytraceMesh);
+
+        // Bake Probes
+        UpdateUniformBuffers(0);
+#if SCENE == 0
+        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(), uvec3(20, 15, 20), vec3(0, 9.5f, 0), vec3(16.5 * 1.5f, 10 * 2.0f, 16.5 * 1.5f));
+#elif SCENE == 1
+        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(),
+            // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
+            uvec3(10, 10, 10), vec3(0.4f, 4.0f, 0.5f), vec3(16.0f, 11.0f, 14.0f)); //x -8 to 8 y -2 to 12 z -8 to 15
+#elif SCENE == 2
+        pc.Create(&coreReferences, &testCubeMap, &uRaytraceSceneBuffer, &uBoxLightBuffer, &raytraceMesh, bvh.get(),
+            // IF YOU CHANGE probe dentiy, you gotta change what the depth is truncated to when sampling (hardcoded for now)
+            uvec3(15, 5, 10), vec3(0, 5, 4), vec3(18.0f, 15.0f, 25.0f)); //x -8 to 8 y -2 to 12 z -8 to 15
+#endif  
+        CreateObjectShaders();
 #else
         GUIManager::RegisterUIFunction(std::bind(&VBDManager::DrawUI, &vbdManager));
         vector vbdShaderParams = {
@@ -1165,7 +1175,7 @@ private:
         vbdManager.Initialize(coreReferences);
 #endif
         
-        SetupQuad();
+        
     }
 
     Camera camera = Camera(vec3(0), static_cast<float>(WIDTH) / static_cast<float>(HEIGHT), glm::radians(45.0f));
@@ -1322,6 +1332,10 @@ private:
 
             UpdateTime();
             GUIManager::MainLoop();
+            if (pc.rebakedFlag) {
+                CreateObjectShaders();
+                pc.rebakedFlag = false;
+            }
             inputManager.Update(window);
             camera.Update(inputManager, dt);
             game.Update(time, dt);

@@ -193,7 +193,6 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
         std::cerr << "Failed to parse gltf of name " << path << " - remember gltf needs LoadASCII glb needs LoadBinary " << std::endl;
     }
 
-    multiPrimitivePBR = mkU<MultiPrimitivePBRInfo>();
     multiPrimitivePBR2 = mkU<MultiPrimitiveMaterialInfo>();
     triToMaterialIndex.clear();
     for (const tinygltf::Mesh& mesh : model.meshes) {
@@ -203,7 +202,6 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
     }
 
     indexCount = indices.size();
-    assert(indexCount == multiPrimitivePBR->triToMaterialIndex.size() * 3);
     assert(indexCount == triToMaterialIndex.size() * 3);
 
     vector<MaterialData> matData;
@@ -212,8 +210,6 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
     // Materials
     for (const tinygltf::Material& mat : model.materials) {
         const auto& pbr = mat.pbrMetallicRoughness;
-
-        //
         matData.push_back(
             MaterialData{
                 .albedoMult = pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data())),
@@ -221,37 +217,6 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
                 .metallicRoughnessIndex = pbr.metallicRoughnessTexture.index,
             }
         );
-        //
-
-        multiPrimitivePBR->baseColorMult = pbr.baseColorFactor.empty() ? vec4(1.0f) : vec4(glm::make_vec4(pbr.baseColorFactor.data()));
-
-        if (pbr.baseColorTexture.index >= 0) {
-            const auto& img = model.images[model.textures[pbr.baseColorTexture.index].source];
-            multiPrimitivePBR->baseColorTexs.push_back({});
-            multiPrimitivePBR->baseColorTexs[multiPrimitivePBR->baseColorTexs.size() - 1].CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
-        }
-        if (pbr.metallicRoughnessTexture.index >= 0) {
-            const auto& img = model.images[model.textures[pbr.metallicRoughnessTexture.index].source];
-            multiPrimitivePBR->metallicRoughnessTexs.push_back({});
-            (--multiPrimitivePBR->metallicRoughnessTexs.end())->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
-        }
-        // SO DEBUG TODO: NOT THIS, ENSURE THAT count(color) == count(metallicRoughness) and count(ao) > 0
-        if (pbr.metallicRoughnessTexture.index < 0 && pbr.baseColorTexture.index >= 0) {
-            const auto& img = model.images[model.textures[pbr.baseColorTexture.index].source];
-            multiPrimitivePBR->metallicRoughnessTexs.push_back({});
-            (--multiPrimitivePBR->metallicRoughnessTexs.end())->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
-        }
-        if (multiPrimitivePBR->aoTexs.size() == 0 && pbr.baseColorTexture.index >= 0) {
-            const auto& img = model.images[model.textures[pbr.baseColorTexture.index].source];
-            multiPrimitivePBR->aoTexs.push_back({});
-            (--multiPrimitivePBR->aoTexs.end())->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
-        }
-        // SO DEBUG END
-        if (mat.occlusionTexture.index >= 0) {
-            const auto& img = model.images[model.textures[mat.occlusionTexture.index].source];
-            multiPrimitivePBR->aoTexs.push_back({});
-            (--multiPrimitivePBR->aoTexs.end())->CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
-        }
     }
 
     multiPrimitivePBR2->primData = WBuffer();
@@ -261,31 +226,6 @@ void Mesh::LoadGLTFModelAndTextures(const VulkanReferences& ref, const std::stri
         const auto& img = model.images[model.textures[i].source];
         multiPrimitivePBR2->textures.push_back({});
         multiPrimitivePBR2->textures[multiPrimitivePBR2->textures.size() - 1].CreateFromPixels(ref, img.image.data(), img.width, img.height, vk::Format::eR8G8B8A8Srgb);
-    }
-
-    // Uniform
-    UPBRInfo pbrInfo = {
-        .albedoMult = multiPrimitivePBR->baseColorMult,
-        .hasAlbedoTex = true,
-        .hasMetallicRoughnessTex = true,
-        .hasAOTex = true
-    };
-    multiPrimitivePBR->uPbrInfo.emplace_back();
-    multiPrimitivePBR->uPbrInfo.back().Create(ref, sizeof(UPBRInfo), vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-    memcpy(multiPrimitivePBR->uPbrInfo.back().MapMemory(), &pbrInfo, sizeof(UPBRInfo));
-
-    // Triangle to Index Buffer
-    multiPrimitivePBR->triToMaterialIndexBuffer.CreateDeviceLocalFromData(ref, sizeof(uint32_t) * multiPrimitivePBR->triToMaterialIndex.size(), 
-        vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst | (isStorageBuffer ? vk::BufferUsageFlagBits::eStorageBuffer : static_cast<vk::BufferUsageFlagBits>(0)), 
-        multiPrimitivePBR->triToMaterialIndex.data());
-
-    // Debug test
-    vector<int> testVec;
-    if (multiPrimitivePBR->baseColorTexs.size() != 0) testVec.push_back(multiPrimitivePBR->baseColorTexs.size());
-    if (multiPrimitivePBR->metallicRoughnessTexs.size() != 0) testVec.push_back(multiPrimitivePBR->metallicRoughnessTexs.size());
-    if (multiPrimitivePBR->aoTexs.size() != 0) testVec.push_back(multiPrimitivePBR->aoTexs.size());
-    for (int i = 0; i < testVec.size() - 1; i++) {
-        // assert(testVec[i] == testVec[i + 1]);
     }
 }
 
@@ -343,7 +283,7 @@ void Mesh::CreateFromGLTFPrimitive(const VulkanReferences& ref, ShaderPipeline* 
 
 void Mesh::LoadGLTFPrimitive(const tinygltf::Model& model, const tinygltf::Primitive& prim, bool accountForMultiplePrimitives) {
     assert(accountForMultiplePrimitives || (vertices.size() + indices.size()) == 0);
-    assert(!accountForMultiplePrimitives || multiPrimitivePBR != nullptr);
+    assert(!accountForMultiplePrimitives || multiPrimitivePBR2 != nullptr);
 
     if (prim.indices == -1) {
         assert(accountForMultiplePrimitives);
@@ -400,7 +340,6 @@ void Mesh::LoadGLTFPrimitive(const tinygltf::Model& model, const tinygltf::Primi
     for (size_t i = 0; i < primIndices.size(); i++) {
         indices.push_back(primIndices[i] + indexOffset);
         if (accountForMultiplePrimitives && i % 3 == 0) {
-            multiPrimitivePBR->triToMaterialIndex.push_back(prim.material);
             triToMaterialIndex.push_back(prim.material);
         }
     }

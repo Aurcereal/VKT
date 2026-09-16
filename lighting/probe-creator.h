@@ -43,7 +43,12 @@ public:
 
 	inline bool GetPingPongSelect() { return pingPongSelect; }
 	void ContinueFeedbackBake();
+
+	void DrawUI();
+
+	bool rebakedFlag = false;
 private:
+	void MultiBounceBakeEnv(glm::uvec3 probeCounts, mat4 transform, int bakeCount, int bounceCount);
 	void BakeEnvironmentProbes(uint32_t bakeCount, glm::uvec3 probeCounts, mat4 transform);
 	
 	void SetupFeedbackBake();

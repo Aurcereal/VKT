@@ -104,7 +104,6 @@ public:
     void GetPositions(vector<vec3>*) const;
     const vector<uint32_t>& GetIndices() const;
 
-    uPtr<MultiPrimitivePBRInfo> multiPrimitivePBR;
     uPtr<MultiPrimitiveMaterialInfo> multiPrimitivePBR2;
     uPtr<SinglePrimitivePBRInfo> singlePrimitivePBR;
 private:

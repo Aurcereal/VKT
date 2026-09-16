@@ -82,7 +82,7 @@ void WTexture::CreateFromPixels(const VulkanReferences& ref, const uint8_t* pixe
 {
     
     vk::DeviceSize imageByteSize = texWidth * texHeight * 4;
-    // Staging to get the actual data closer to GPU (which we cant directly write to ig)
+    // Staging to get the actual data closer to GPU (which we cant directly write to)
     WBuffer stagingBuffer;
     stagingBuffer.Create(ref, imageByteSize,
         vk::BufferUsageFlagBits::eTransferSrc,
@@ -151,6 +151,13 @@ void WTexture::CreateCubeMapFromFiles(const VulkanReferences& ref, std::array<st
     TransitionImageLayoutHardcoded(ref, vk::ImageLayout::eTransferDstOptimal, targetLayout);
 
     CreateSampler(ref);
+}
+
+void WTexture::Fill(const VulkanReferences& ref, uint32_t data) {
+    WBuffer buf;
+    buf.Create(ref, width * height * 4 * sizeof(uint8_t), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eDeviceLocal);
+    buf.Fill(ref, data);
+    CopyFromBuffer(ref, buf);
 }
 
 void WTexture::CopyFromBuffer(const VulkanReferences& ref, const WBuffer& buffer, vk::DeviceSize bufferOffset, uint32_t arrayLayer) {
@@ -235,66 +242,111 @@ void WTexture::StaticTransitionImageLayoutHardcodedEnqueue(CommandBuffer* cmd, c
     // eByRegion means barrier is a per region condition
     vk::PipelineStageFlags srcStage, dstStage;
     // Hardcode layout transitions
-    if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
-        // Undefined -> Transfer Destination
+    switch (oldLayout) {
+    case vk::ImageLayout::eUndefined:
         barrier.srcAccessMask = {};
-        barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-
-        srcStage = vk::PipelineStageFlagBits::eTopOfPipe; // No waiting needed, earliest possible stage to wait on
-        dstStage = vk::PipelineStageFlagBits::eTransfer;
-    }
-    else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
-        // Transfer Destination -> Shader Reading
-        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-        srcStage = vk::PipelineStageFlagBits::eTransfer;
-        dstStage = vk::PipelineStageFlagBits::eFragmentShader; // TODO: ACCOUNT FOR COMPUTE SHADER, this layout transition could be called for a compute shader too
-    }
-    else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eColorAttachmentOptimal) {
-        barrier.srcAccessMask = vk::AccessFlagBits::eNone;
-        barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-
         srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
-        dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    }
-    else if (oldLayout == vk::ImageLayout::eColorAttachmentOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
-        barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-        srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dstStage = vk::PipelineStageFlagBits::eFragmentShader; // TODO: ACCOUNT FOR COMPUTE SHADER, like just run an undefined to compute shader transition or smth or have a isCompute bool idk prolly not that big a deal either way but COULD cause an error technically
-    }
-    else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eColorAttachmentOptimal) {
+        break;
+    case vk::ImageLayout::eTransferDstOptimal:
         barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-
         srcStage = vk::PipelineStageFlagBits::eTransfer;
-        dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    }
-    else if (oldLayout == vk::ImageLayout::eColorAttachmentOptimal && newLayout == vk::ImageLayout::ePresentSrcKHR) {
+        break;
+    case vk::ImageLayout::eColorAttachmentOptimal:
         barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-        barrier.dstAccessMask = {};
-
         srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        dstStage = vk::PipelineStageFlagBits::eBottomOfPipe;
-    }
-    else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eGeneral) {
-        barrier.srcAccessMask = {};
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
-
-        srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
-        dstStage = vk::PipelineStageFlagBits::eComputeShader;
-    }
-    else if (oldLayout == vk::ImageLayout::eGeneral && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+        break;
+    case vk::ImageLayout::eGeneral:
         barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
         srcStage = vk::PipelineStageFlagBits::eComputeShader;
-        dstStage = vk::PipelineStageFlagBits::eFragmentShader; // TODO: ACCOUNT FOR COMPUTE SHADER, like just run an undefined to compute shader transition or smth or have a isCompute bool idk prolly not that big a deal either way but COULD cause an error technically
-    } else {
+        break;
+    default:
         throw std::invalid_argument("unsupported layout transition");
+    };
+    
+    switch (newLayout) {
+        case vk::ImageLayout::eTransferDstOptimal:
+            barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+            dstStage = vk::PipelineStageFlagBits::eTransfer;
+            break;
+        case vk::ImageLayout::eShaderReadOnlyOptimal:
+            barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            dstStage = vk::PipelineStageFlagBits::eFragmentShader;
+            break;
+        case vk::ImageLayout::eColorAttachmentOptimal:
+            barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+            dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            break;
+        case vk::ImageLayout::eGeneral:
+            barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+            dstStage = vk::PipelineStageFlagBits::eComputeShader;
+            break;
+        case vk::ImageLayout::ePresentSrcKHR:
+            barrier.dstAccessMask = {};
+            dstStage = vk::PipelineStageFlagBits::eBottomOfPipe;
+            break;
+        default:
+            throw std::invalid_argument("unsupported layout transition");
     }
+    //if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
+    //    // Undefined -> Transfer Destination
+    //    barrier.srcAccessMask = {};
+    //    barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+    //    srcStage = vk::PipelineStageFlagBits::eTopOfPipe; // No waiting needed, earliest possible stage to wait on
+    //    dstStage = vk::PipelineStageFlagBits::eTransfer;
+    //}
+    //else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+    //    // Transfer Destination -> Shader Reading
+    //    barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+    //    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+    //    srcStage = vk::PipelineStageFlagBits::eTransfer;
+    //    dstStage = vk::PipelineStageFlagBits::eFragmentShader; // TODO: ACCOUNT FOR COMPUTE SHADER, this layout transition could be called for a compute shader too
+    //}
+    //else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eColorAttachmentOptimal) {
+    //    barrier.srcAccessMask = vk::AccessFlagBits::eNone;
+    //    barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+
+    //    srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+    //    dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    //}
+    //else if (oldLayout == vk::ImageLayout::eColorAttachmentOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+    //    barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+    //    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+    //    srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    //    dstStage = vk::PipelineStageFlagBits::eFragmentShader; // TODO: ACCOUNT FOR COMPUTE SHADER, like just run an undefined to compute shader transition or smth or have a isCompute bool idk prolly not that big a deal either way but COULD cause an error technically
+    //}
+    //else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eColorAttachmentOptimal) {
+    //    barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+    //    barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+
+    //    srcStage = vk::PipelineStageFlagBits::eTransfer;
+    //    dstStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    //}
+    //else if (oldLayout == vk::ImageLayout::eColorAttachmentOptimal && newLayout == vk::ImageLayout::ePresentSrcKHR) {
+    //    barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+    //    barrier.dstAccessMask = {};
+
+    //    srcStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    //    dstStage = vk::PipelineStageFlagBits::eBottomOfPipe;
+    //}
+    //else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eGeneral) {
+    //    barrier.srcAccessMask = {};
+    //    barrier.dstAccessMask = vk::AccessFlagBits::eShaderWrite;
+
+    //    srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+    //    dstStage = vk::PipelineStageFlagBits::eComputeShader;
+    //}
+    //else if (oldLayout == vk::ImageLayout::eGeneral && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+    //    barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+    //    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+    //    srcStage = vk::PipelineStageFlagBits::eComputeShader;
+    //    dstStage = vk::PipelineStageFlagBits::eFragmentShader; // TODO: ACCOUNT FOR COMPUTE SHADER, like just run an undefined to compute shader transition or smth or have a isCompute bool idk prolly not that big a deal either way but COULD cause an error technically
+    //} else {
+    //    throw std::invalid_argument("unsupported layout transition");
+    //}
 
     cmd->pipelineBarrier(srcStage, dstStage, {}, {}, nullptr, barrier);
 }
