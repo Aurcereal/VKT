@@ -9,7 +9,7 @@
 
 ![](ShowcaseMedia/shFix.gif)
 
-todo: Put a probe moving thing here
+https://github.com/user-attachments/assets/4f2746f2-6622-4c99-870e-6c26582e2fa4
 
 ## Features
 
