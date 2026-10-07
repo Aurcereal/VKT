@@ -86,6 +86,12 @@ struct SceneStorage {
 };
 SceneStorage sceneStorage;
 
+struct UBakeSettings {
+	int mode;
+	float ambientTerm;
+	vec2 padding;
+};
+
 // TODO: all these params def annoying so not having it, need to have some struct to represent the world
 void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<WBuffer>* uRaytracedSceneBuffer, vector<WBuffer>* uBoxLightBuffer, Mesh* raytraceMesh, const BVHGPU* bvh,
 	uvec3 probeCounts, vec3 boundingBoxOrigin, vec3 boundingBoxSize) {
@@ -141,6 +147,14 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, depthZeroData.data());
 	probeVolume->depthBufferB.CreateDeviceLocalFromData(*ref, sizeof(float) * depthBufferCount,
 		vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, depthZeroData.data());
+	
+	probeVolume->uBakeSettings.Create(*ref, sizeof(UBakeSettings), false);
+
+	UBakeSettings bakeSettings = {
+		.mode = 0,
+		.ambientTerm = 0.4f
+	};
+	probeVolume->uBakeSettings.SetData(0, &bakeSettings);
 
 	// Transform
 	mat4 transform = glm::translate(mat4(1.0), boundingBoxOrigin) * glm::scale(mat4(1.0), boundingBoxSize) * glm::translate(mat4(1.0), vec3(-0.5));
@@ -195,6 +209,8 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
+
+		probeVolume->uBakeSettings.GetSParameter(vk::ShaderStageFlagBits::eCompute),
 	};
 	vector envMatParams = {
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = uRaytracedSceneBuffer}),
@@ -219,6 +235,8 @@ void ProbeCreator::Create(const VulkanReferences* ref, WTexture* skybox, vector<
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &probeVolume->probeLayoutUBO}),
 
 		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{.texture = &probeVolume->octahedralDepthMap}),
+
+		probeVolume->uBakeSettings.GetMParameter(),
 	};
 	bakeEnvironmentProbe.Create(*ref, "shaders/compiled/spherical-harmonics-env-prog.spv", envShaParams, envMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PBakePassInfo));
 
@@ -343,6 +361,14 @@ void ProbeCreator::MultiBounceBakeEnv(glm::uvec3 probeCounts, mat4 transform, in
 	probeVolume->depthBufferB.CreateDeviceLocalFromData(*ref, sizeof(float) * depthBufferCount,
 		vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, depthZeroData.data());
 
+	probeVolume->uBakeSettings.Create(*ref, sizeof(UBakeSettings), false);
+
+	UBakeSettings bakeSettings = {
+		.mode = 0,
+		.ambientTerm = 0.4f
+	};
+	probeVolume->uBakeSettings.SetData(0, &bakeSettings);
+
 	// Re-create textures
 	probeVolume->octahedralDepthMap = WTexture{};
 	probeVolume->octahedralDepthMap.Create(*ref, 18 * probeCounts.x * probeCounts.y, 36 * probeCounts.z, vk::Format::eR32Sfloat,
@@ -377,6 +403,8 @@ void ProbeCreator::MultiBounceBakeEnv(glm::uvec3 probeCounts, mat4 transform, in
 
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eCompute },
 		ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eCompute },
+
+		probeVolume->uBakeSettings.GetSParameter(vk::ShaderStageFlagBits::eCompute),
 	};
 	vector envMatParams = {
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = sceneStorage.uRaytracedSceneBuffer}),
@@ -401,6 +429,8 @@ void ProbeCreator::MultiBounceBakeEnv(glm::uvec3 probeCounts, mat4 transform, in
 		ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &probeVolume->probeLayoutUBO}),
 
 		ShaderParameter::MParameter(ShaderParameter::UCombinedSampler{.texture = &probeVolume->octahedralDepthMap}),
+
+		probeVolume->uBakeSettings.GetMParameter(),
 	};
 	bakeEnvironmentProbe = ComputePipeline{};
 	bakeEnvironmentProbe.Create(*ref, "shaders/compiled/spherical-harmonics-env-prog.spv", envShaParams, envMatParams, uvec3(SQRT_THREADS_PER_GROUP, SQRT_THREADS_PER_GROUP, 1), true, sizeof(PBakePassInfo));

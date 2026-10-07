@@ -32,3 +32,9 @@ public struct PrimitiveData {
 
     public float2 padding;
 };
+
+public struct UBakeSettings {
+    public int mode;
+    public float ambientTerm;
+    public float2 padding;
+}

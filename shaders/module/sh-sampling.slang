@@ -87,7 +87,8 @@ public float3 SampleInterpolatedShIrradiance(float3 norm, float3 pos, Structured
 
         // Trilinear
         float3 trilinearWeights = lerp(1. - fac, fac, float3(offset));
-        float weight = trilinearWeights.x * trilinearWeights.y * trilinearWeights.z;
+        float trilinearWeight = trilinearWeights.x * trilinearWeights.y * trilinearWeights.z;
+        float weight = trilinearWeight;
 
         // Backface
         // Offset prevents going to 0 when small details that are close to backfaces need light

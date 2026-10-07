@@ -1,4 +1,4 @@
-import Raytracing;
+import pbr;
 import probe_helper;
 
 // Per work-group variable

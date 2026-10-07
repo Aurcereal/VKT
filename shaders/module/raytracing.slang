@@ -11,10 +11,6 @@ public struct URaytracedScene {
     public float4x4 invTransposeModel;
 }
 
-public float3 SampleSkybox(float3 rd, SamplerCube skybox) {
-    return float3(0.4, 0.5, 1.) * 9.;//25. * float3(0.4, 0.5, 1.0) * pow(max(0., dot(rd, float3(1., 1., 0.)/sqrt(2.))), 64.);//10. * skybox.Sample(rd).rgb;//10. * skybox.Sample(rd).rgb; // pow(skybox.Sample(rd).rgb,float3(2.2));  ;/
-}
-
 public float4 SampleEnvironment(float3 ro, float3 rd,
         float4x4 model, // todo: inv transpose
         StructuredBuffer<Vertex> worldVertices,
@@ -142,13 +138,16 @@ public float4 SampleEnvironmentBVHEnvSH(float3 ro, float3 rd,
                                     StructuredBuffer<PrimitiveData> primitiveDatas,
 
                                     StructuredBuffer<float> envSH,
+                                    StructuredBuffer<float> skySH,
                                     Sampler2D<float> depthTexture, 
                                     ConstantBuffer<UProbeVolumeLayout> probeLayout,
                                     SamplerCube skybox,
 
                                     ConstantBuffer<UBoxLight> boxLight,
 
-                                    int ignoredProbe
+                                    int ignoredProbe,
+
+                                    in UBakeSettings bakeSettings
     ) {
 
     float3 lro = mul(invModel, float4(ro, 1.)).xyz;
@@ -191,7 +190,11 @@ public float4 SampleEnvironmentBVHEnvSH(float3 ro, float3 rd,
         float metallic = 0.;   // worldMetal.Sample(hitUv).r;
         float roughness = 0.2; // worldRoughness.Sample(hitUv).r;
         float ao = 0.;         // worldAO.Sample(hitUv).r;
-        return float4(SamplePBREnv(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, envSH, depthTexture, probeLayout, ignoredProbe).rgb, inter.t);
+        
+        return 
+            bakeSettings.mode == 0 ? float4(SamplePBREnv(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, envSH, depthTexture, probeLayout, invModel, skybox, bvhMesh, ignoredProbe).rgb, inter.t) : 
+            bakeSettings.mode == 1 ? float4(SamplePBRSky(normalize(ro - hitPos), hitPos, hitNorm, albedo, metallic, roughness, ao, skySH), inter.t) :
+                        float4(albedo * bakeSettings.ambientTerm, inter.t);
     } else {
         return float4(SampleSkybox(rd, skybox), 1e4);
     }

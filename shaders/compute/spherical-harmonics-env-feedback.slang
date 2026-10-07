@@ -106,7 +106,7 @@ void main(uint3 id: SV_DispatchThreadID,
     bvh.nodes = bvhNodes;
 
     float3 rd = uniformSphere(float2(rngi(id.x - id.y + 525 + pushConstants.currGroup * 23 - pushConstants.currBake * 7), rngi(id.x + id.y + 525 - pushConstants.currGroup * 15 + pushConstants.currBake * 9)));
-    float4 samp = SampleEnvironmentBVHEnvSH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, texs, triToPrimIndex, primData, prevShCoefficients, prevDepthTexture, probeLayout, skybox, uBoxLight, probeToBake);
+    float4 samp = float4(1.0,0.0,0.0,1.0);//SampleEnvironmentBVHEnvSH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, texs, triToPrimIndex, primData, prevShCoefficients, prevDepthTexture, probeLayout, skybox, uBoxLight, probeToBake);
     float3 li = samp.xyz;
     float depth = samp.w;
 

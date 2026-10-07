@@ -30,6 +30,8 @@ groupshared float4[64] sharedDepthSamples;
 
 [[vk::binding(16, 0)]] [[vk::image_format("r32f")]] Sampler2D<float> depthTextureSrc;
 
+[[vk::binding(17, 0)]] ConstantBuffer<UBakeSettings> uBakeSettings;
+
 struct PushConstants {
     uint32_t currGroup;
     uint32_t currBake;
@@ -112,7 +114,7 @@ void main(uint3 id: SV_DispatchThreadID,
 
     float3 rd = uniformSphere(float2(rngi(2 * threadIDWithinGroup + 525 + pushConstants.currGroup * 23 - pushConstants.currBake * 7), rngi(threadIDWithinGroup + 525 - pushConstants.currGroup * 15 + pushConstants.currBake * 9)));
     // float4 samp = SampleEnvironmentBVH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, texs, triToPrimIndex, primData, skySh, skybox, uBoxLight);
-    float4 samp = SampleEnvironmentBVHEnvSH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, texs, triToPrimIndex, primData, shCoefficientsSrc, depthTextureSrc, probeLayout, skybox, uBoxLight, probeToBake);
+    float4 samp = SampleEnvironmentBVHEnvSH(probePos, rd, uRaytracedScene.invModel, float3x3(uRaytracedScene.invTransposeModel), bvh, texs, triToPrimIndex, primData, shCoefficientsSrc, skySh, depthTextureSrc, probeLayout, skybox, uBoxLight, probeToBake, uBakeSettings);
     float3 li = samp.xyz;
     float depth = samp.w;
 

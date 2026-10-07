@@ -888,6 +888,12 @@ private:
            ShaderParameter::SParameter{.type = ShaderParameter::Type::COMBINED_SAMPLER, .visibility = vk::ShaderStageFlagBits::eFragment },
            ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eFragment },
 
+           ShaderParameter::SParameter{.type = ShaderParameter::Type::UNIFORM, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+            ShaderParameter::SParameter{.type = ShaderParameter::Type::BUFFER, .visibility = vk::ShaderStageFlagBits::eFragment },
+
         };
         vector gltfPrimAbstractMParams = {
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uniformBuffers}),
@@ -913,6 +919,12 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
+
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uRaytraceSceneBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh.vertexBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh.indexBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->triangleRedirectionBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->nodeBuffer}),
         };
         gltfPrimPBRShader = {};
         gltfPrimPBRShader.Create(coreReferences, "shaders/compiled/pbr-gltf-prim.spv", &swapSurfaceFormat.format, GetDepthFormat(), gltfPrimSParams, true, false);

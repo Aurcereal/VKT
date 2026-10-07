@@ -9,6 +9,7 @@
 #include "core/memory-helper.h"
 #include "scene/render-pass.h"
 #include "bvh/bvh-manager.h"
+#include "scene/uniform-buffer.h"
 
 using namespace glm;
 
@@ -26,6 +27,7 @@ struct ProbeVolume {
 	WTexture octahedralDepthMap;
 	WBuffer depthBufferA;
 	WBuffer depthBufferB;
+	UniformBuffer uBakeSettings;
 
 	vector<WBuffer> probeEntityUBO;
 

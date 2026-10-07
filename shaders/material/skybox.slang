@@ -1,4 +1,4 @@
-import Raytracing;
+import pbr;
 import misc_structs;
 
 ConstantBuffer<UCamera> ubo;
