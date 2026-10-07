@@ -21,7 +21,7 @@ This is a Dynamic Diffuse Global Illumination (DDGI) built in Vulkan using C++ a
 - GLTF Loading, Texture, & Material Handling
 - Sampling of probes allowing objects to have accurate realtime lighting as they move through the scene
 
-All baking is done with compute shaders written in Slang
+All baking is done with compute shaders written in Slang.  Once the probes are baked, this technique is very cheap, almost as performant as light maps, except objects that move through the scene will adapt their lighting according to the bake.
 
 ## Chronological Dev-Log Below
 ---
