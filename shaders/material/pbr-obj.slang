@@ -3,6 +3,7 @@ import PBR;
 import sh_sampling;
 import probe_helper;
 import misc_structs;
+import bvh_traversal;
 
 
 struct UEntity {
@@ -42,6 +43,13 @@ StructuredBuffer<float> shCoefficients;
 StructuredBuffer<float> skySh;
 [[vk::image_format("r32f")]] Sampler2D<float> depthTexture;
 ConstantBuffer<UProbeVolumeLayout> probeLayout;
+
+//
+ConstantBuffer<URaytracedScene> uRaytracedScene;
+StructuredBuffer<Vertex> worldVertices;
+StructuredBuffer<uint32_t> worldIndices;
+StructuredBuffer<uint32_t> triangleRedirection;
+StructuredBuffer<BVHNode> bvhNodes;
 
 [shader("vertex")]
 VSOutput vertMain(VSInput vIn) { //uint vid : SV_VertexID) {
@@ -83,7 +91,15 @@ float4 fragMain(FSInput o) : SV_Target
 
     float3 wo = normalize(camPos - o.worldPos);
 
-    float3 col = float3(1.0, 0.0, 1.0);//gammaCorrect(reinhardOp(SamplePBREnv(wo, o.worldPos+norm*0.01, norm, albedo, metallic, roughness, ambientOcclusion, shCoefficients, depthTexture, probeLayout)));
+    BVHMesh bvh;
+    bvh.indices = worldIndices;
+    bvh.vertices = worldVertices;
+    bvh.triangleRedirection = triangleRedirection;
+    bvh.nodes = bvhNodes;
+
+    float3 col = gammaCorrect(reinhardOp(SamplePBREnv(
+        wo, o.worldPos + norm * 0.01, norm, albedo, metallic, roughness, ambientOcclusion, shCoefficients, depthTexture, probeLayout, uRaytracedScene.invModel, skybox, bvh
+        )));
 
     return float4(col, 1.);
 

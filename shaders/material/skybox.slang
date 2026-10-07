@@ -35,5 +35,5 @@ SamplerCube skybox;
 [shader("fragment")]
 float4 fragMain(VSOutput o) : SV_Target
 {
-    return float4(SampleSkybox(normalize(o.worldPos), skybox), 1.);
+    return float4(2.5*SampleSkybox(normalize(o.worldPos), skybox, true), 1.);
 }

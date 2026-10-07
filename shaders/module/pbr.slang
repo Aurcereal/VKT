@@ -4,8 +4,8 @@ import probe_helper;
 import misc_structs;
 import bvh_traversal;
 
-public float3 SampleSkybox(float3 rd, SamplerCube skybox) {
-    return 10. * skybox.Sample(rd).rgb;//float3(0.4, 0.5, 1.) * 40.;//55. * float3(0.4, 0.5, 1.0) * pow(max(0., dot(rd, float3(0., 1., 1.) / sqrt(2.))), 64.); ;////10. * skybox.Sample(rd).rgb; // pow(skybox.Sample(rd).rgb,float3(2.2));  ;/
+public float3 SampleSkybox(float3 rd, SamplerCube skybox, bool normalize = false) {
+    return (normalize ? 1.0 : 10.) * skybox.Sample(rd).rgb;//float3(0.4, 0.5, 1.) * 40.;//55. * float3(0.4, 0.5, 1.0) * pow(max(0., dot(rd, float3(0., 1., 1.) / sqrt(2.))), 64.); ;////10. * skybox.Sample(rd).rgb; // pow(skybox.Sample(rd).rgb,float3(2.2));  ;/
 }
 
 static float3 light_pos[4] = float3[](float3(-10, 10, 10),
