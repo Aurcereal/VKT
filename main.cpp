@@ -1010,6 +1010,12 @@ private:
             ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = pc.GetSkyboxSH()}),
             ShaderParameter::MParameter(ShaderParameter::UCombinedSampler {.texture = &pc.probeVolume->octahedralDepthMap}),
             ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &pc.probeVolume->probeLayoutUBO}),
+
+            ShaderParameter::MParameter(ShaderParameter::UUniform {.uniformBuffers = &uRaytraceSceneBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh.vertexBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &raytraceMesh.indexBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->triangleRedirectionBuffer}),
+            ShaderParameter::MParameter(ShaderParameter::UBuffer {.buffer = &bvh->nodeBuffer}),
         };
         blobMaterial = {};
         blobMaterial.Create(&shaderPipeline, coreReferences, blobMaterialParams);

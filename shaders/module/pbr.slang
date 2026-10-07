@@ -5,7 +5,7 @@ import misc_structs;
 import bvh_traversal;
 
 public float3 SampleSkybox(float3 rd, SamplerCube skybox, bool normalize = false) {
-    return (normalize ? 1.0 : 10.) * skybox.Sample(rd).rgb;//float3(0.4, 0.5, 1.) * 40.;//55. * float3(0.4, 0.5, 1.0) * pow(max(0., dot(rd, float3(0., 1., 1.) / sqrt(2.))), 64.); ;////10. * skybox.Sample(rd).rgb; // pow(skybox.Sample(rd).rgb,float3(2.2));  ;/
+    return (normalize ? 1.0 : 25.) * skybox.Sample(rd).rgb;//float3(0.4, 0.5, 1.) * 40.;//55. * float3(0.4, 0.5, 1.0) * pow(max(0., dot(rd, float3(0., 1., 1.) / sqrt(2.))), 64.); ;////10. * skybox.Sample(rd).rgb; // pow(skybox.Sample(rd).rgb,float3(2.2));  ;/
 }
 
 static float3 light_pos[4] = float3[](float3(-10, 10, 10),
@@ -99,7 +99,7 @@ public float3 SamplePBRSky(float3 wo, float3 worldPos, float3 norm, float3 albed
 }
 
 public float3 SamplePBREnv(float3 wo, float3 worldPos, float3 norm, float3 albedo, float metallic, float roughness, float ao, StructuredBuffer<float> sh, Sampler2D<float> depthTexture, ConstantBuffer<UProbeVolumeLayout> probeLayout,
-                           float4x4 invModel, SamplerCube skybox, BVHMesh bvh,
+                           float4x4 invModel, SamplerCube skybox, in BVHMesh bvh,
                            int ignoredProbe = -1) {
 
     float3 lightDir = float3(0.0, 1.0, 1.0) / sqrt(2.0);
@@ -109,7 +109,7 @@ public float3 SamplePBREnv(float3 wo, float3 worldPos, float3 norm, float3 albed
     Intersection shadowInter = RayIntersectBVH(lro, lLightDir, bvh);
 
     float3 indirect = SampleInterpolatedShIrradiance(norm, worldPos, sh, depthTexture, probeLayout, ignoredProbe);
-    float3 direct = SampleSkybox(lightDir, skybox) * step(1e4, shadowInter.t);
+    float3 direct = SampleSkybox(lightDir, skybox) * step(1e4, shadowInter.t) * max(0., dot(norm, lightDir));
     return SamplePBR(wo, worldPos, norm, albedo, metallic, roughness, ao, indirect + direct);
 }
 

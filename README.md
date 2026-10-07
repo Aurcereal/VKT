@@ -1,6 +1,31 @@
 # Realtime Vulkan Global Illumination Renderer
 ---
 
+## Results
+
+![](ShowcaseMedia/1000-probes-direct-skybox1.png)
+
+![](ShowcaseMedia/18750-probes-direct.png)
+
+![](ShowcaseMedia/shFix.gif)
+
+todo: Put a probe moving thing here
+
+## Features
+
+This is a Dynamic Diffuse Global Illumination (DDGI) built in Vulkan using C++ and Slang.  It uses probes to bake the realistic lighting of a scene, and then samples the probes to have real-time realistic lighting.  It features
+
+- Spherical Harmonics to reduce probe storage requirements
+- Octahedral depth atlas for probe visibility to prevent light leaks
+- BVH creation & traversal so that probes can quickly bake their lighting
+- GLTF Loading, Texture, & Material Handling
+- Sampling of probes allowing objects to have accurate realtime lighting as they move through the scene
+
+All baking is done with compute shaders written in Slang
+
+## Chronological Dev-Log Below
+---
+
 This is a renderer written with Vulkan that will support global illumination through diffuse irradiance probes and some TBD specular technique.
 
 For this milestone, I spent a lot of time learning Vulkan and setting up the renderer.  I implemented textures and obj loading.  
